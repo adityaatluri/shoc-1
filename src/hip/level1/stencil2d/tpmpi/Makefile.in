@@ -228,7 +228,6 @@ USE_CUDA = @USE_CUDA@
 USE_HIP = @USE_HIP@
 USE_MPI = @USE_MPI@
 VERSION = @VERSION@
-_NVCC = @_NVCC@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
 abs_top_builddir = @abs_top_builddir@

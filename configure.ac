@@ -281,7 +281,6 @@ AS_IF([test "x$with_hip = xyes"], [echo HIP Found])
 AS_IF([test "x$with_hip"!=xno],
 	[
 		AC_PATH_PROG([HIPCC],[hipcc],[])
-		AC_PATH_PROG([_NVCC],[nvcc],[])
         AS_IF([test "x$HIPCC" != x],
 			[ AC_MSG_NOTICE([$HIPCC])
 	        savedCXX=$CXX
@@ -295,12 +294,10 @@ AS_IF([test "x$with_hip"!=xno],
 
     	    # find hip include path based on location of hcc command
     	    hipbindir=`AS_DIRNAME([$HIPCC])`
-            _nvccbindir=`AS_DIRNAME([$_NVCC])`
-    	    HIP_INCDIR=`AS_DIRNAME([$_nvccbindir])`/include
     	    CPPFLAGS="$CPPFLAGS -I$HIP_INCDIR"
     	    AC_MSG_NOTICE([$HIP_INCDIR])
 
-              AC_CHECK_HEADERS([cuda.h cuda_runtime.h],[],
+              AC_CHECK_HEADERS([hip_runtime.h],[],
                 [HIPCC=""]
               )
               AC_CHECK_LIB([cublas], [cublasInit],[],
@@ -310,7 +307,7 @@ AS_IF([test "x$with_hip"!=xno],
                 [HIPCC=""]
               )
 
-	
+			HIPCC=y
 			CPPFLAGS=$savedCPPFLAGS
 			LIBS=$savedLIBS
 			CXX=$savedCXX
@@ -327,7 +324,7 @@ AS_IF([test "x$with_hip"!=xno],
         AS_IF([test "x$HIPCC" != x],
             [with_hip=yes
              USE_HIP=yes
-             MPI_SUBDIRS="$MPI_SUBDIRS hip"
+#             MPI_SUBDIRS="$MPI_SUBDIRS hip"
              AC_SUBST([HIP_INCDIR])],
             [AC_MSG_NOTICE([no usable HIP installation found])
              with_hip=no
@@ -496,7 +493,7 @@ AS_IF([test "x$with_mpi" != xno],
         CXX=$savedCXX
 
         AS_IF([test "x$MPICXX" != "x"],
-            [ AS_IF([test "x$with_opencl" = xyes -o "x$with_cuda" = xyes],
+            [ AS_IF([test "x$with_opencl" != xyes -o "x$with_cuda" != xyes],
                   [ with_mpi=yes
                     USE_MPI=yes
                   ],

@@ -10,8 +10,8 @@
 #include <iostream>
 #include <cstdlib>
 
-#include <cuda.h>
-#include <cuda_runtime.h>
+//#include <cuda.h>
+#include "hip_runtime.h"
 
 #include "ResultDatabase.h"
 #include "OptionParser.h"

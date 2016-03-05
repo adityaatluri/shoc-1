@@ -648,7 +648,6 @@ BUILD_HIP_FALSE
 BUILD_HIP_TRUE
 HIP_CPPFLAGS
 HIP_INCDIR
-_NVCC
 HIPCC
 with_hip
 BUILD_CUDA_FALSE
@@ -6189,46 +6188,6 @@ $as_echo "no" >&6; }
 fi
 
 
-		# Extract the first word of "nvcc", so it can be a program name with args.
-set dummy nvcc; ac_word=$2
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-$as_echo_n "checking for $ac_word... " >&6; }
-if ${ac_cv_path__NVCC+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  case $_NVCC in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path__NVCC="$_NVCC" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  test -z "$as_dir" && as_dir=.
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
-    ac_cv_path__NVCC="$as_dir/$ac_word$ac_exec_ext"
-    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  ;;
-esac
-fi
-_NVCC=$ac_cv_path__NVCC
-if test -n "$_NVCC"; then
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $_NVCC" >&5
-$as_echo "$_NVCC" >&6; }
-else
-  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-fi
-
-
         if test "x$HIPCC" != x; then :
    { $as_echo "$as_me:${as_lineno-$LINENO}: $HIPCC" >&5
 $as_echo "$as_me: $HIPCC" >&6;}
@@ -6265,63 +6224,16 @@ $as_echo X$HIPCC |
 	    q
 	  }
 	  s/.*/./; q'`
-            _nvccbindir=`$as_dirname -- $_NVCC ||
-$as_expr X$_NVCC : 'X\(.*[^/]\)//*[^/][^/]*/*$' \| \
-	 X$_NVCC : 'X\(//\)[^/]' \| \
-	 X$_NVCC : 'X\(//\)$' \| \
-	 X$_NVCC : 'X\(/\)' \| . 2>/dev/null ||
-$as_echo X$_NVCC |
-    sed '/^X\(.*[^/]\)\/\/*[^/][^/]*\/*$/{
-	    s//\1/
-	    q
-	  }
-	  /^X\(\/\/\)[^/].*/{
-	    s//\1/
-	    q
-	  }
-	  /^X\(\/\/\)$/{
-	    s//\1/
-	    q
-	  }
-	  /^X\(\/\).*/{
-	    s//\1/
-	    q
-	  }
-	  s/.*/./; q'`
-    	    HIP_INCDIR=`$as_dirname -- $_nvccbindir ||
-$as_expr X$_nvccbindir : 'X\(.*[^/]\)//*[^/][^/]*/*$' \| \
-	 X$_nvccbindir : 'X\(//\)[^/]' \| \
-	 X$_nvccbindir : 'X\(//\)$' \| \
-	 X$_nvccbindir : 'X\(/\)' \| . 2>/dev/null ||
-$as_echo X$_nvccbindir |
-    sed '/^X\(.*[^/]\)\/\/*[^/][^/]*\/*$/{
-	    s//\1/
-	    q
-	  }
-	  /^X\(\/\/\)[^/].*/{
-	    s//\1/
-	    q
-	  }
-	  /^X\(\/\/\)$/{
-	    s//\1/
-	    q
-	  }
-	  /^X\(\/\).*/{
-	    s//\1/
-	    q
-	  }
-	  s/.*/./; q'`/include
     	    CPPFLAGS="$CPPFLAGS -I$HIP_INCDIR"
     	    { $as_echo "$as_me:${as_lineno-$LINENO}: $HIP_INCDIR" >&5
 $as_echo "$as_me: $HIP_INCDIR" >&6;}
 
-              for ac_header in cuda.h cuda_runtime.h
+              for ac_header in hip_runtime.h
 do :
-  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
-ac_fn_cxx_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
-if eval test \"x\$"$as_ac_Header"\" = x"yes"; then :
+  ac_fn_cxx_check_header_mongrel "$LINENO" "hip_runtime.h" "ac_cv_header_hip_runtime_h" "$ac_includes_default"
+if test "x$ac_cv_header_hip_runtime_h" = xyes; then :
   cat >>confdefs.h <<_ACEOF
-#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
+#define HAVE_HIP_RUNTIME_H 1
 _ACEOF
 
 else
@@ -6428,7 +6340,7 @@ else
 fi
 
 
-
+			HIPCC=y
 			CPPFLAGS=$savedCPPFLAGS
 			LIBS=$savedLIBS
 			CXX=$savedCXX
@@ -6450,7 +6362,7 @@ fi
         if test "x$HIPCC" != x; then :
   with_hip=yes
              USE_HIP=yes
-             MPI_SUBDIRS="$MPI_SUBDIRS hip"
+#             MPI_SUBDIRS="$MPI_SUBDIRS hip"
 
 else
   { $as_echo "$as_me:${as_lineno-$LINENO}: no usable HIP installation found" >&5
@@ -6882,7 +6794,7 @@ fi
         CXX=$savedCXX
 
         if test "x$MPICXX" != "x"; then :
-   if test "x$with_opencl" = xyes -o "x$with_cuda" = xyes; then :
+   if test "x$with_opencl" != xyes -o "x$with_cuda" != xyes; then :
    with_mpi=yes
                     USE_MPI=yes
 
