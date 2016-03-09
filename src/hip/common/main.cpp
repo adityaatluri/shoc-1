@@ -57,12 +57,12 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op);
 // ****************************************************************************
 void EnumerateDevicesAndChoose(int chooseDevice, bool verbose)
 {
-    cudaSetDevice(chooseDevice);
+    hipSetDevice(chooseDevice);
     int actualdevice;
-    cudaGetDevice(&actualdevice);
+    hipGetDevice(&actualdevice);
 
     int deviceCount;
-    cudaGetDeviceCount(&deviceCount);
+    hipGetDeviceCount(&deviceCount);
     if (verbose)
     {
         cout << "Number of devices = " << deviceCount << "\n";
@@ -70,8 +70,8 @@ void EnumerateDevicesAndChoose(int chooseDevice, bool verbose)
     string deviceName = "";
     for (int device = 0; device < deviceCount; ++device)
     {
-        cudaDeviceProp deviceProp;
-        cudaGetDeviceProperties(&deviceProp, device);
+        hipDeviceProp_t deviceProp;
+        hipGetDeviceProperties(&deviceProp, device);
         if (device == actualdevice)
             deviceName = deviceProp.name;
         if (verbose)
@@ -86,8 +86,6 @@ void EnumerateDevicesAndChoose(int chooseDevice, bool verbose)
             cout << "  regsPerBlock       = " << deviceProp.regsPerBlock
                     << endl;
             cout << "  warpSize           = " << deviceProp.warpSize << endl;
-            cout << "  memPitch           = " << HumanReadable(
-                    deviceProp.memPitch) << endl;
             cout << "  maxThreadsPerBlock = " << deviceProp.maxThreadsPerBlock
                     << endl;
             cout << "  maxThreadsDim[3]   = " << deviceProp.maxThreadsDim[0]
@@ -101,8 +99,6 @@ void EnumerateDevicesAndChoose(int chooseDevice, bool verbose)
             cout << "  major (hw version) = " << deviceProp.major << endl;
             cout << "  minor (hw version) = " << deviceProp.minor << endl;
             cout << "  clockRate          = " << deviceProp.clockRate << endl;
-            cout << "  textureAlignment   = " << deviceProp.textureAlignment
-                    << endl;
         }
     }
     cout << "Chose device:"
@@ -197,7 +193,7 @@ int main(int argc, char *argv[])
         device = op.getOptionVecInt("device")[0];
 #endif
         int deviceCount;
-        cudaGetDeviceCount(&deviceCount);
+        hipGetDeviceCount(&deviceCount);
         if (device >= deviceCount) {
             cerr << "Warning: device index: " << device <<
             " out of range, defaulting to device 0.\n";

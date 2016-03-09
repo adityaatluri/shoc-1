@@ -9,7 +9,7 @@ CXX = ${MPICXX}
 CXXLD = ${MPICXX}
 
 AM_LDFLAGS = $(HIP_LDFLAGS)
-AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common
+AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -D__HIP_PLATFORM_HCC__= -I/opt/hcc/include
 
 # What is the destination for programs built from this directory?
 epcudadir = $(bindir)/EP/HIP

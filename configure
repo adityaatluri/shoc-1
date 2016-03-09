@@ -4791,7 +4791,7 @@ then
 else
     if test "$GXX" = yes
     then
-        HIPCCXXFLAGS="-O2"
+        HIPCCXXFLAGS="-O2 -D__HIP_PLATFORM_HCC__"
     else
         HIPCCXXFLAGS=
     fi
@@ -5940,7 +5940,6 @@ $as_echo X$cudabindir |
 	  }
 	  s/.*/./; q'`/include
               CPPFLAGS="$CPPFLAGS -I$CUDA_INCDIR"
-
               for ac_header in cuda.h cuda_runtime.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
@@ -6227,7 +6226,8 @@ $as_echo X$HIPCC |
     	    CPPFLAGS="$CPPFLAGS -I$HIP_INCDIR"
     	    { $as_echo "$as_me:${as_lineno-$LINENO}: $HIP_INCDIR" >&5
 $as_echo "$as_me: $HIP_INCDIR" >&6;}
-
+			{ $as_echo "$as_me:${as_lineno-$LINENO}: $CPPFLAGS" >&5
+$as_echo "$as_me: $CPPFLAGS" >&6;}
               for ac_header in hip_runtime.h
 do :
   ac_fn_cxx_check_header_mongrel "$LINENO" "hip_runtime.h" "ac_cv_header_hip_runtime_h" "$ac_includes_default"
@@ -6243,104 +6243,46 @@ fi
 
 done
 
-              { $as_echo "$as_me:${as_lineno-$LINENO}: checking for cublasInit in -lcublas" >&5
-$as_echo_n "checking for cublasInit in -lcublas... " >&6; }
-if ${ac_cv_lib_cublas_cublasInit+:} false; then :
+			# Extract the first word of "hipcc", so it can be a program name with args.
+set dummy hipcc; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_path_HIPCC+:} false; then :
   $as_echo_n "(cached) " >&6
 else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lcublas  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
+  case $HIPCC in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_HIPCC="$HIPCC" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_HIPCC="$as_dir/$ac_word$ac_exec_ext"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
 
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char cublasInit ();
-int
-main ()
-{
-return cublasInit ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_cublas_cublasInit=yes
+  ;;
+esac
+fi
+HIPCC=$ac_cv_path_HIPCC
+if test -n "$HIPCC"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $HIPCC" >&5
+$as_echo "$HIPCC" >&6; }
 else
-  ac_cv_lib_cublas_cublasInit=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cublas_cublasInit" >&5
-$as_echo "$ac_cv_lib_cublas_cublasInit" >&6; }
-if test "x$ac_cv_lib_cublas_cublasInit" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBCUBLAS 1
-_ACEOF
-
-  LIBS="-lcublas $LIBS"
-
-else
-  HIPCC=""
-
-fi
-
-              { $as_echo "$as_me:${as_lineno-$LINENO}: checking for cufftPlan1d in -lcufft" >&5
-$as_echo_n "checking for cufftPlan1d in -lcufft... " >&6; }
-if ${ac_cv_lib_cufft_cufftPlan1d+:} false; then :
-  $as_echo_n "(cached) " >&6
-else
-  ac_check_lib_save_LIBS=$LIBS
-LIBS="-lcufft  $LIBS"
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-/* Override any GCC internal prototype to avoid an error.
-   Use char because int might match the return type of a GCC
-   builtin and then its argument prototype would still apply.  */
-#ifdef __cplusplus
-extern "C"
-#endif
-char cufftPlan1d ();
-int
-main ()
-{
-return cufftPlan1d ();
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_cxx_try_link "$LINENO"; then :
-  ac_cv_lib_cufft_cufftPlan1d=yes
-else
-  ac_cv_lib_cufft_cufftPlan1d=no
-fi
-rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext conftest.$ac_ext
-LIBS=$ac_check_lib_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cufft_cufftPlan1d" >&5
-$as_echo "$ac_cv_lib_cufft_cufftPlan1d" >&6; }
-if test "x$ac_cv_lib_cufft_cufftPlan1d" = xyes; then :
-  cat >>confdefs.h <<_ACEOF
-#define HAVE_LIBCUFFT 1
-_ACEOF
-
-  LIBS="-lcufft $LIBS"
-
-else
-  HIPCC=""
-
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
 fi
 
 
-			HIPCC=y
 			CPPFLAGS=$savedCPPFLAGS
 			LIBS=$savedLIBS
 			CXX=$savedCXX
@@ -6373,11 +6315,13 @@ $as_echo "$as_me: no usable HIP installation found" >&6;}
 fi
         if test "x$with_hip" = xyes; then :
   if test "x$HIP_CPPFLAGS" = x; then :
-                                                                      HIP_CPPFLAGS="-gencode=arch=compute_20,code=sm_20"
+                                                                      HIP_CPPFLAGS=""
                  { $as_echo "$as_me:${as_lineno-$LINENO}: using HIP_CPPFLAGS=$HIP_CPPFLAGS" >&5
 $as_echo "$as_me: using HIP_CPPFLAGS=$HIP_CPPFLAGS" >&6;}
                  { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: *** SHOC programs may fail if these -gencode values do not apply to your GPU.  If they don't apply, or if you want to shorten SHOC's compile time, determine the -gencode options that apply for your GPU and re-configure SHOC explicitly specifying only those options in HIP_CPPFLAGS during the configure. ***" >&5
 $as_echo "$as_me: WARNING: *** SHOC programs may fail if these -gencode values do not apply to your GPU.  If they don't apply, or if you want to shorten SHOC's compile time, determine the -gencode options that apply for your GPU and re-configure SHOC explicitly specifying only those options in HIP_CPPFLAGS during the configure. ***" >&2;}
+				{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using $CPPFLAGS" >&5
+$as_echo "$as_me: WARNING: using $CPPFLAGS" >&2;}
 
 
 fi
