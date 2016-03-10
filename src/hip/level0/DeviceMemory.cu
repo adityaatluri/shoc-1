@@ -2,8 +2,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <cuda.h>
-#include <cuda_runtime_api.h>
+#include "hip_runtime_api.h"
 #include "cudacommon.h"
 #include "OptionParser.h"
 #include "ResultDatabase.h"
@@ -14,19 +13,19 @@
 // Forward declarations for texture memory test and benchmark kernels
 void TestTextureMem(ResultDatabase &resultDB, OptionParser &op, double scalet);
 __global__ void
-readGlobalMemoryCoalesced(float *data, float *output, int size, int repeat);
-__global__ void readGlobalMemoryUnit(float *data, float *output, int size, int repeat);
-__global__ void readLocalMemory(const float *data, float *output, int size, int repeat);
-__global__ void writeGlobalMemoryCoalesced(float *output, int size, int repeat);
-__global__ void writeGlobalMemoryUnit(float *output, int size, int repeat);
-__global__ void writeLocalMemory(float *output, int size, int repeat);
+readGlobalMemoryCoalesced(hipLaunchParm lp, float *data, float *output, int size, int repeat);
+__global__ void readGlobalMemoryUnit(hipLaunchParm lp, float *data, float *output, int size, int repeat);
+__global__ void readLocalMemory(hipLaunchParm lp, const float *data, float *output, int size, int repeat);
+__global__ void writeGlobalMemoryCoalesced(hipLaunchParm lp, float *output, int size, int repeat);
+__global__ void writeGlobalMemoryUnit(hipLaunchParm lp, float *output, int size, int repeat);
+__global__ void writeLocalMemory(hipLaunchParm lp, float *output, int size, int repeat);
 __device__ int getRand(int seed, int mod);
-__global__ void readTexels(int n, float *d_out, int width);
+/*__global__ void readTexels(int n, float *d_out, int width);
 __global__ void readTexelsInCache(int n, float *d_out);
 __global__ void readTexelsRandom(int n, float *d_out, int width, int height);
 // Texture to use for the benchmarks
 texture<float4, 2, cudaReadModeElementType> texA;
-
+*/
 // ****************************************************************************
 // Function: addBenchmarkSpecOptions
 //
@@ -83,19 +82,20 @@ void addBenchmarkSpecOptions(OptionParser &op)
 void RunBenchmark(ResultDatabase &resultDB,
                   OptionParser &op)
 {
-    int npasses = op.getOptionInt("passes");
+	std::string passes("passes");
+    int npasses = op.getOptionInt(passes);
     size_t minGroupSize = 32;
     size_t maxGroupSize = 512;
     size_t globalWorkSize = 32768;  // 64 * maxGroupSize = 64 * 512;
     unsigned int memSize       = 64*1024*1024;  // 64MB buffer
     void *testmem;
-    cudaMalloc(&testmem, memSize*2);
-    while (cudaGetLastError() != cudaSuccess && memSize != 0)
+    hipMalloc(&testmem, memSize*2);
+    while (hipGetLastError() != hipSuccess && memSize != 0)
     {
         memSize >>= 1; // keept it a power of 2
-        cudaMalloc(&testmem, memSize*2);
+        hipMalloc(&testmem, memSize*2);
     }
-    cudaFree(testmem);
+    hipFree(testmem);
     if(memSize == 0)
     {
         printf("Not able to allocate device memory. Exiting!\n");
@@ -117,24 +117,23 @@ void RunBenchmark(ResultDatabase &resultDB,
     float *d_mem1, *d_mem2;
     char sizeStr[128];
 
-    cudaMalloc((void**)&d_mem1, sizeof(float)*(numWordsFloat));
+    hipMalloc((void**)&d_mem1, sizeof(float)*(numWordsFloat));
     CHECK_CUDA_ERROR();
-    cudaMalloc((void**)&d_mem2, sizeof(float)*(numWordsFloat));
-    CHECK_CUDA_ERROR();
-
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    hipMalloc((void**)&d_mem2, sizeof(float)*(numWordsFloat));
     CHECK_CUDA_ERROR();
 
-    cudaEventRecord(start, 0);
-    readGlobalMemoryCoalesced<<<512, 64>>>
-                  (d_mem1, d_mem2, numWordsFloat, 256);
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
+    hipEvent_t start, stop;
+    hipEventCreate(&start);
+    hipEventCreate(&stop);
+    CHECK_CUDA_ERROR();
+
+    hipEventRecord(start, 0);
+	hipLaunchKernel(HIP_KERNEL_NAME(readGlobalMemoryCoalesced), dim3(512), dim3(64), 0, 0, d_mem1, d_mem2, numWordsFloat, 256);
+    hipEventRecord(stop, 0);
+    hipEventSynchronize(stop);
     CHECK_CUDA_ERROR();
     float t = 0.0f;
-    cudaEventElapsedTime(&t, start, stop);
+    hipEventElapsedTime(&t, start, stop);
     t /= 1.e3;
     double scalet = 0.15 / t;
     if (scalet < 1)
@@ -155,18 +154,17 @@ void RunBenchmark(ResultDatabase &resultDB,
             sprintf (sizeStr, "blockSize:%03d", threads);
 
             // Test 1
-            cudaEventRecord(start, 0);
-            readGlobalMemoryCoalesced<<<blocks, threads>>>
-                    (d_mem1, d_mem2, numWordsFloat, maxRepeatsCoal);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(readGlobalMemoryCoalesced), dim3(blocks), dim3(threads), 0, 0, d_mem1, d_mem2, numWordsFloat, maxRepeatsCoal);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
 
             // We can run out of resources at larger thread counts on
             // some devices.  If we made a successful run at smaller
             // thread counts, just ignore errors at this size.
             if (threads > minGroupSize)
             {
-                if (cudaGetLastError() != cudaSuccess)
+                if (hipGetLastError() != hipSuccess)
                     break;
             }
             else
@@ -174,7 +172,7 @@ void RunBenchmark(ResultDatabase &resultDB,
                 CHECK_CUDA_ERROR();
             }
             t = 0.0f;
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
             bdwth = ((double) globalWorkSize * maxRepeatsCoal * 16 * sizeof(float))
                    / (t * 1000. * 1000. * 1000.);
@@ -182,39 +180,36 @@ void RunBenchmark(ResultDatabase &resultDB,
                     bdwth);
 
             // Test 2
-            cudaEventRecord(start, 0);
-            readGlobalMemoryUnit<<<blocks, threads>>>
-                    (d_mem1, d_mem2, numWordsFloat, maxRepeatsUnit);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(readGlobalMemoryUnit), dim3(blocks), dim3(threads), 0, 0, d_mem1, d_mem2, numWordsFloat, maxRepeatsUnit);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             CHECK_CUDA_ERROR();
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
             bdwth = ((double) globalWorkSize * maxRepeatsUnit * 16 * sizeof(float))
                    / (t * 1000. * 1000. * 1000.);
             resultDB.AddResult("readGlobalMemoryUnit", sizeStr, "GB/s", bdwth);
 
             // Test 3
-            cudaEventRecord(start, 0);
-            readLocalMemory<<<blocks, threads>>>
-                    (d_mem1, d_mem2, numWordsFloat, maxRepeatsLocal);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(readLocalMemory), dim3(blocks), dim3(threads), 0, 0, d_mem1, d_mem2, numWordsFloat, maxRepeatsLocal);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             CHECK_CUDA_ERROR();
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
             bdwth = ((double) globalWorkSize * maxRepeatsLocal * 16 * sizeof(float))
                    / (t * 1000. * 1000. * 1000.);
             resultDB.AddResult("readLocalMemory", sizeStr, "GB/s", bdwth);
 
             // Test 4
-            cudaEventRecord(start, 0);
-            writeGlobalMemoryCoalesced<<<blocks, threads>>>
-                    (d_mem2, numWordsFloat, maxRepeatsCoal);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(writeGlobalMemoryCoalesced), dim3(blocks), dim3(threads), 0, 0, d_mem2, numWordsFloat, maxRepeatsCoal);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             CHECK_CUDA_ERROR();
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
             bdwth = ((double) globalWorkSize * maxRepeatsCoal * 16 * sizeof(float))
                    / (t * 1000. * 1000. * 1000.);
@@ -222,13 +217,12 @@ void RunBenchmark(ResultDatabase &resultDB,
                     bdwth);
 
             // Test 5
-            cudaEventRecord(start, 0);
-            writeGlobalMemoryUnit<<<blocks, threads>>>
-                       (d_mem2, numWordsFloat, maxRepeatsUnit);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(writeGlobalMemoryUnit), dim3(blocks), dim3(threads), 0, 0, d_mem2, numWordsFloat, maxRepeatsUnit);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             CHECK_CUDA_ERROR();
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
             bdwth = ((double) globalWorkSize * maxRepeatsUnit * 16 * sizeof(float))
                     / (t * 1000. * 1000. * 1000.);
@@ -236,26 +230,25 @@ void RunBenchmark(ResultDatabase &resultDB,
                     bdwth);
 
             // Test 6
-            cudaEventRecord(start, 0);
-            writeLocalMemory<<<blocks, threads>>>
-                       (d_mem2, numWordsFloat, maxRepeatsLocal);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(writeLocalMemory), dim3(blocks), dim3(threads), 0, 0, d_mem2, numWordsFloat, maxRepeatsLocal);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             CHECK_CUDA_ERROR();
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
             bdwth = ((double) globalWorkSize * maxRepeatsLocal * 16 * sizeof(float))
                    / (t * 1000. * 1000. * 1000.);
             resultDB.AddResult("writeLocalMemory", sizeStr, "GB/s", bdwth);
         }
     }
-    cudaFree(d_mem1);
-    cudaFree(d_mem2);
+    hipFree(d_mem1);
+    hipFree(d_mem2);
     delete[] h_in;
     delete[] h_out;
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-    TestTextureMem(resultDB, op, scalet);
+    hipEventDestroy(start);
+    hipEventDestroy(stop);
+//    TestTextureMem(resultDB, op, scalet);
 }
 
 // ****************************************************************************
@@ -291,7 +284,7 @@ void RunBenchmark(ResultDatabase &resultDB,
 //   kernel problem).  I made kernel rep factor problem-size dependent.
 //
 // ****************************************************************************
-void TestTextureMem(ResultDatabase &resultDB, OptionParser &op, double scalet)
+/*void TestTextureMem(ResultDatabase &resultDB, OptionParser &op, double scalet)
 {
     // Number of times to repeat each test
     const unsigned int passes = op.getOptionInt("passes");
@@ -451,12 +444,12 @@ void TestTextureMem(ResultDatabase &resultDB, OptionParser &op, double scalet)
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 }
-
+*/
 // Begin benchmark kernels
 __global__ void
-readGlobalMemoryCoalesced(float *data, float *output, int size, int repeat)
+readGlobalMemoryCoalesced(hipLaunchParm lp, float *data, float *output, int size, int repeat)
 {
-    int gid = threadIdx.x + (blockDim.x * blockIdx.x), j = 0;
+    int gid = hipThreadIdx_x + (hipBlockDim_x * hipBlockIdx_x), j = 0;
     float sum = 0;
     int s = gid;
     for (j=0 ; j<repeat ; ++j)
@@ -484,9 +477,9 @@ readGlobalMemoryCoalesced(float *data, float *output, int size, int repeat)
 }
 
 __global__ void
-readGlobalMemoryUnit(float *data, float *output, int size, int repeat)
+readGlobalMemoryUnit(hipLaunchParm lp, float *data, float *output, int size, int repeat)
 {
-    int gid = threadIdx.x + (blockDim.x * blockIdx.x), j = 0;
+    int gid = hipThreadIdx_x + (hipBlockDim_x * hipBlockIdx_x), j = 0;
     float sum = 0;
     int s = gid*512;
     for (j=0 ; j<repeat ; ++j)
@@ -514,11 +507,11 @@ readGlobalMemoryUnit(float *data, float *output, int size, int repeat)
 }
 
 __global__ void
-readLocalMemory(const float *data, float *output, int size, int repeat)
+readLocalMemory(hipLaunchParm lp, const float *data, float *output, int size, int repeat)
 {
-    int gid = threadIdx.x + (blockDim.x * blockIdx.x), j = 0;
+    int gid = hipThreadIdx_x + (hipBlockDim_x * hipBlockIdx_x), j = 0;
     float sum = 0;
-    int tid=threadIdx.x, localSize=blockDim.x, grpid=blockIdx.x,
+    int tid=hipThreadIdx_x, localSize=hipBlockDim_x, grpid=hipBlockIdx_x,
             litems=2048/localSize, goffset=localSize*grpid+tid*litems;
     int s = tid;
     __shared__ float lbuf[2048];
@@ -552,9 +545,9 @@ readLocalMemory(const float *data, float *output, int size, int repeat)
 }
 
 __global__ void
-writeGlobalMemoryCoalesced(float *output, int size, int repeat)
+writeGlobalMemoryCoalesced(hipLaunchParm lp, float *output, int size, int repeat)
 {
-    int gid = threadIdx.x + (blockDim.x * blockIdx.x), j = 0;
+    int gid = hipThreadIdx_x + (hipBlockDim_x * hipBlockIdx_x), j = 0;
     int s = gid;
     for (j=0 ; j<repeat ; ++j)
     {
@@ -579,9 +572,9 @@ writeGlobalMemoryCoalesced(float *output, int size, int repeat)
 }
 
 __global__ void
-writeGlobalMemoryUnit(float *output, int size, int repeat)
+writeGlobalMemoryUnit(hipLaunchParm lp, float *output, int size, int repeat)
 {
-    int gid = threadIdx.x + (blockDim.x * blockIdx.x), j = 0;
+    int gid = hipThreadIdx_x + (hipBlockDim_x * hipBlockIdx_x), j = 0;
     int s = gid*512;
     for (j=0 ; j<repeat ; ++j)
     {
@@ -606,10 +599,10 @@ writeGlobalMemoryUnit(float *output, int size, int repeat)
 }
 
 __global__ void
-writeLocalMemory(float *output, int size, int repeat)
+writeLocalMemory(hipLaunchParm lp, float *output, int size, int repeat)
 {
-    int gid = threadIdx.x + (blockDim.x * blockIdx.x), j = 0;
-    int tid=threadIdx.x, localSize=blockDim.x, litems=2048/localSize;
+    int gid = hipThreadIdx_x + (hipBlockDim_x * hipBlockIdx_x), j = 0;
+    int tid=hipThreadIdx_x, localSize=hipBlockDim_x, litems=2048/localSize;
     int s = tid;
     __shared__ float lbuf[2048];
     for (j=0 ; j<repeat ; ++j)
@@ -636,7 +629,7 @@ writeLocalMemory(float *output, int size, int repeat)
     for (j=0 ; j<litems ; ++j)
        output[gid] = lbuf[tid];
 }
-
+/*
 // Simple Repeated Linear Read from texture memory
 __global__ void readTexels(int n, float *d_out, int width)
 {
@@ -687,4 +680,4 @@ __global__ void readTexelsRandom(int n, float *d_out, int width, int height)
     }
     d_out[out_idx] = sum;
 }
-
+*/

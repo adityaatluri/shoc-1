@@ -27,8 +27,8 @@
 // ****************************************************************************
 void addBenchmarkSpecOptions(OptionParser &op)
 {
-    op.addOption("nopinned", OPT_BOOL, "",
-                 "disable usage of pinned (pagelocked) memory", 'p');
+    op.addOption(std::string("nopinned"), OPT_BOOL, std::string(""),
+                 std::string("disable usage of pinned (pagelocked) memory"), 'p');
 }
 
 // ****************************************************************************
@@ -37,8 +37,8 @@ void addBenchmarkSpecOptions(OptionParser &op)
 // Purpose:
 //   Measures the bandwidth of the bus connecting the host processor to the
 //   OpenCL device.  This benchmark repeatedly transfers data chunks of various
-//   sizes across the bus to the host from the device and calculates the
-//   bandwidth for each chunk size.
+//   sizes across the bus to the OpenCL device, and calculates the bandwidth.
+//
 //
 // Arguments:
 //  resultDB: the benchmark stores its results in this ResultDatabase
@@ -57,8 +57,8 @@ void addBenchmarkSpecOptions(OptionParser &op)
 void RunBenchmark(ResultDatabase &resultDB,
                   OptionParser &op)
 {
-    bool verbose = op.getOptionBool("verbose");
-    bool pinned  = !op.getOptionBool("nopinned");
+    const bool verbose = op.getOptionBool("verbose");
+    const bool pinned = !op.getOptionBool("nopinned");
 
     // Sizes are in kb
     int nSizes  = 20;
@@ -67,21 +67,13 @@ void RunBenchmark(ResultDatabase &resultDB,
     long long numMaxFloats = 1024 * (sizes[nSizes-1]) / 4;
 
     // Create some host memory pattern
-    float *hostMem1;
-    float *hostMem2;
+    float *hostMem = NULL;
     if (pinned)
     {
-        cudaMallocHost((void**)&hostMem1, sizeof(float)*numMaxFloats);
-        cudaError_t err1 = cudaGetLastError();
-        cudaMallocHost((void**)&hostMem2, sizeof(float)*numMaxFloats);
-        cudaError_t err2 = cudaGetLastError();
-	while (err1 != cudaSuccess || err2 != cudaSuccess)
-	{
-	    // free the first buffer if only the second failed
-	    if (err1 == cudaSuccess)
-	        cudaFreeHost((void*)hostMem1);
-
-	    // drop the size and try again
+        hipMallocHost((void**)&hostMem, sizeof(float) * numMaxFloats);
+        while (hipGetLastError() != hipSuccess)
+        {
+ 	    // drop the size and try again
 	    if (verbose) cout << " - dropping size allocating pinned mem\n";
 	    --nSizes;
 	    if (nSizes < 1)
@@ -90,23 +82,22 @@ void RunBenchmark(ResultDatabase &resultDB,
 		return;
 	    }
 	    numMaxFloats = 1024 * (sizes[nSizes-1]) / 4;
-            cudaMallocHost((void**)&hostMem1, sizeof(float)*numMaxFloats);
-            err1 = cudaGetLastError();
-            cudaMallocHost((void**)&hostMem2, sizeof(float)*numMaxFloats);
-            err2 = cudaGetLastError();
-	}
-   }
+            hipMallocHost((void**)&hostMem, sizeof(float) * numMaxFloats);
+        }
+    }
     else
     {
-        hostMem1 = new float[numMaxFloats];
-        hostMem2 = new float[numMaxFloats];
+        hostMem = new float[numMaxFloats];
     }
-    for (int i=0; i<numMaxFloats; i++)
-        hostMem1[i] = i % 77;
+
+    for (int i = 0; i < numMaxFloats; i++)
+    {
+        hostMem[i] = i % 77;
+    }
 
     float *device;
-    cudaMalloc((void**)&device, sizeof(float) * numMaxFloats);
-    while (cudaGetLastError() != cudaSuccess)
+    hipMalloc((void**)&device, sizeof(float) * numMaxFloats);
+    while (hipGetLastError() != hipSuccess)
     {
 	// drop the size and try again
 	if (verbose) cout << " - dropping size allocating device mem\n";
@@ -117,17 +108,14 @@ void RunBenchmark(ResultDatabase &resultDB,
 	    return;
 	}
 	numMaxFloats = 1024 * (sizes[nSizes-1]) / 4;
-        cudaMalloc((void**)&device, sizeof(float) * numMaxFloats);
+        hipMalloc((void**)&device, sizeof(float) * numMaxFloats);
     }
 
-    cudaMemcpy(device, hostMem1,
-               numMaxFloats*sizeof(float), cudaMemcpyHostToDevice);
-    cudaThreadSynchronize();
     const unsigned int passes = op.getOptionInt("passes");
 
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    hipEvent_t start, stop;
+    hipEventCreate(&start);
+    hipEventCreate(&stop);
     CHECK_CUDA_ERROR();
 
     // Three passes, forward and backward both
@@ -146,48 +134,44 @@ void RunBenchmark(ResultDatabase &resultDB,
 
             int nbytes = sizes[sizeIndex] * 1024;
 
-            cudaEventRecord(start, 0);
-            cudaMemcpy(hostMem2, device,
-                       nbytes, cudaMemcpyDeviceToHost);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipMemcpy(device, hostMem, nbytes, hipMemcpyHostToDevice);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             float t = 0;
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             //times[sizeIndex] = t;
 
             // Convert to GB/sec
             if (verbose)
             {
-                cerr << "size " <<sizes[sizeIndex] << "k took " << t <<
+                cerr << "size " << sizes[sizeIndex] << "k took " << t <<
                         " ms\n";
             }
 
             double speed = (double(sizes[sizeIndex]) * 1024. / (1000*1000)) / t;
             char sizeStr[256];
             sprintf(sizeStr, "% 7dkB", sizes[sizeIndex]);
-            resultDB.AddResult("ReadbackSpeed", sizeStr, "GB/sec", speed);
-            resultDB.AddResult("ReadbackTime", sizeStr, "ms", t);
+            resultDB.AddResult("DownloadSpeed", sizeStr, "GB/sec", speed);
+            resultDB.AddResult("DownloadTime", sizeStr, "ms", t);
         }
-	//resultDB.AddResult("ReadbackLatencyEstimate", "1-2kb", "ms", times[0]-(times[1]-times[0])/1.);
-	//resultDB.AddResult("ReadbackLatencyEstimate", "1-4kb", "ms", times[0]-(times[2]-times[0])/3.);
-	//resultDB.AddResult("ReadbackLatencyEstimate", "2-4kb", "ms", times[1]-(times[2]-times[1])/1.);
+	//resultDB.AddResult("DownloadLatencyEstimate", "1-2kb", "ms", times[0]-(times[1]-times[0])/1.);
+	//resultDB.AddResult("DownloadLatencyEstimate", "1-4kb", "ms", times[0]-(times[2]-times[0])/3.);
+	//resultDB.AddResult("DownloadLatencyEstimate", "2-4kb", "ms", times[1]-(times[2]-times[1])/1.);
     }
 
     // Cleanup
-    cudaFree((void*)device);
+    hipFree((void*)device);
     CHECK_CUDA_ERROR();
     if (pinned)
     {
-        cudaFreeHost((void*)hostMem1);
-        CHECK_CUDA_ERROR();
-        cudaFreeHost((void*)hostMem2);
+        hipFreeHost((void*)hostMem);
         CHECK_CUDA_ERROR();
     }
     else
     {
-        delete[] hostMem1;
-        delete[] hostMem2;
-        cudaEventDestroy(start);
-	    cudaEventDestroy(stop);
+        delete[] hostMem;
     }
+    hipEventDestroy(start);
+    hipEventDestroy(stop);
 }

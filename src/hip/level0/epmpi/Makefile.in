@@ -97,14 +97,18 @@ am_BusSpeedDownload_OBJECTS = main.$(OBJEXT)
 BusSpeedDownload_OBJECTS = $(am_BusSpeedDownload_OBJECTS)
 am__DEPENDENCIES_1 =
 BusSpeedDownload_DEPENDENCIES = BusSpeedDownload.o \
-	$(am__DEPENDENCIES_1)
+	/home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o \
+	$(top_srcdir)/src/common/OptionParser.o $(am__DEPENDENCIES_1)
 am_BusSpeedReadback_OBJECTS = main.$(OBJEXT)
 BusSpeedReadback_OBJECTS = $(am_BusSpeedReadback_OBJECTS)
 BusSpeedReadback_DEPENDENCIES = BusSpeedReadback.o \
-	$(am__DEPENDENCIES_1)
+	/home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o \
+	$(top_srcdir)/src/common/OptionParser.o $(am__DEPENDENCIES_1)
 am_DeviceMemory_OBJECTS = main.$(OBJEXT)
 DeviceMemory_OBJECTS = $(am_DeviceMemory_OBJECTS)
-DeviceMemory_DEPENDENCIES = DeviceMemory.o $(am__DEPENDENCIES_1)
+DeviceMemory_DEPENDENCIES = DeviceMemory.o \
+	/home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o \
+	$(am__DEPENDENCIES_1)
 am_MaxFlops_OBJECTS = main.$(OBJEXT)
 MaxFlops_OBJECTS = $(am_MaxFlops_OBJECTS)
 MaxFlops_DEPENDENCIES = MaxFlops.o $(am__DEPENDENCIES_1)
@@ -303,11 +307,11 @@ AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -D__HIP_
 # What is the destination for programs built from this directory?
 epcudadir = $(bindir)/EP/HIP
 BusSpeedDownload_SOURCES = main.cpp
-BusSpeedDownload_LDADD = BusSpeedDownload.o $(HIP_LIBS) $(LIBS)
+BusSpeedDownload_LDADD = BusSpeedDownload.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o $(top_srcdir)/src/common/OptionParser.o -lstdc++ -lc++ -lSHOCCommon -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm $(HIP_LIBS) $(LIBS) 
 BusSpeedReadback_SOURCES = main.cpp
-BusSpeedReadback_LDADD = BusSpeedReadback.o $(HIP_LIBS) $(LIBS)
+BusSpeedReadback_LDADD = BusSpeedReadback.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o $(top_srcdir)/src/common/OptionParser.o -lstdc++ -lc++ -lSHOCCommon -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm $(HIP_LIBS) $(LIBS) 
 DeviceMemory_SOURCES = main.cpp
-DeviceMemory_LDADD = DeviceMemory.o $(HIP_LIBS) $(LIBS)
+DeviceMemory_LDADD = DeviceMemory.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o -lstdc++ -lc++ -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm -lSHOCCommon $(HIP_LIBS) $(LIBS) 
 MaxFlops_SOURCES = main.cpp
 MaxFlops_LDADD = MaxFlops.o $(HIP_LIBS) $(LIBS)
 all: all-am

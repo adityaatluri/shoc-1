@@ -21,13 +21,13 @@ epcuda_PROGRAMS = BusSpeedDownload \
 						MaxFlops
 
 BusSpeedDownload_SOURCES	= main.cpp
-BusSpeedDownload_LDADD		= BusSpeedDownload.o $(HIP_LIBS) $(LIBS)
+BusSpeedDownload_LDADD		= BusSpeedDownload.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o $(top_srcdir)/src/common/OptionParser.o -lstdc++ -lc++ -lSHOCCommon -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm $(HIP_LIBS) $(LIBS) 
 
 BusSpeedReadback_SOURCES	= main.cpp
-BusSpeedReadback_LDADD		= BusSpeedReadback.o $(HIP_LIBS) $(LIBS)
+BusSpeedReadback_LDADD		= BusSpeedReadback.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o $(top_srcdir)/src/common/OptionParser.o -lstdc++ -lc++ -lSHOCCommon -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm $(HIP_LIBS) $(LIBS) 
 
 DeviceMemory_SOURCES	= main.cpp
-DeviceMemory_LDADD		= DeviceMemory.o $(HIP_LIBS) $(LIBS)
+DeviceMemory_LDADD		= DeviceMemory.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o -lstdc++ -lc++ -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm -lSHOCCommon $(HIP_LIBS) $(LIBS) 
 
 MaxFlops_SOURCES	= main.cpp
 MaxFlops_LDADD		= MaxFlops.o $(HIP_LIBS) $(LIBS)

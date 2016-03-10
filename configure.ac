@@ -68,7 +68,7 @@ then
 else
     if test "$GXX" = yes
     then
-        HIPCCXXFLAGS="-O2 -D__HIP_PLATFORM_HCC__"
+        HIPCCXXFLAGS="-O2 -D__HIP_PLATFORM_HCC__ -I/home/aditya/Documents/HIP-privatestaging/src/hip_hcc.cpp"
     else
         HIPCCXXFLAGS=
     fi
