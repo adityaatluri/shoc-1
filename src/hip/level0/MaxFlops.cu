@@ -4,36 +4,36 @@
 #include "OptionParser.h"
 #include "ProgressBar.h"
 #include "Utility.h"
-
+#include "hip_runtime.h"
 // Forward Declarations for benchmark kernels
-__global__ void    MAddU(float *target, float val1, float val2);
-__global__ void MulMAddU(float *target, float val1, float val2);
-__global__ void MAddU_DP(double *target, double val1, double val2);
-__global__ void MulMAddU_DP(double *target, double val1, double val2);
+__global__ void    MAddU(hipLaunchParm lp, float *target, float val1, float val2);
+__global__ void MulMAddU(hipLaunchParm lp, float *target, float val1, float val2);
+__global__ void MAddU_DP(hipLaunchParm lp, double *target, double val1, double val2);
+__global__ void MulMAddU_DP(hipLaunchParm lp, double *target, double val1, double val2);
 
 // Add kernels
-template <class T> __global__ void Add1(T *data, int nIters, T v);
-template <class T> __global__ void Add2(T *data, int nIters, T v);
-template <class T> __global__ void Add4(T *data, int nIters, T v);
-template <class T> __global__ void Add8(T *data, int nIters, T v);
+template <class T> __global__ void Add1(hipLaunchParm lp, T *data, int nIters, T v);
+template <class T> __global__ void Add2(hipLaunchParm lp, T *data, int nIters, T v);
+template <class T> __global__ void Add4(hipLaunchParm lp, T *data, int nIters, T v);
+template <class T> __global__ void Add8(hipLaunchParm lp, T *data, int nIters, T v);
 
 // Mul kernels
-template <class T> __global__ void Mul1(T *data, int nIters, T v);
-template <class T> __global__ void Mul2(T *data, int nIters, T v);
-template <class T> __global__ void Mul4(T *data, int nIters, T v);
-template <class T> __global__ void Mul8(T *data, int nIters, T v);
+template <class T> __global__ void Mul1(hipLaunchParm lp, T *data, int nIters, T v);
+template <class T> __global__ void Mul2(hipLaunchParm lp, T *data, int nIters, T v);
+template <class T> __global__ void Mul4(hipLaunchParm lp, T *data, int nIters, T v);
+template <class T> __global__ void Mul8(hipLaunchParm lp, T *data, int nIters, T v);
 
 // MAdd kernels
-template <class T> __global__ void MAdd1(T *data, int nIters, T v1, T v2);
-template <class T> __global__ void MAdd2(T *data, int nIters, T v1, T v2);
-template <class T> __global__ void MAdd4(T *data, int nIters, T v1, T v2);
-template <class T> __global__ void MAdd8(T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MAdd1(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MAdd2(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MAdd4(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MAdd8(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
 
 // MulMAdd kernels
-template <class T> __global__ void MulMAdd1(T *data, int nIters, T v1, T v2);
-template <class T> __global__ void MulMAdd2(T *data, int nIters, T v1, T v2);
-template <class T> __global__ void MulMAdd4(T *data, int nIters, T v1, T v2);
-template <class T> __global__ void MulMAdd8(T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MulMAdd1(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MulMAdd2(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MulMAdd4(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
+template <class T> __global__ void MulMAdd8(hipLaunchParm lp, T *data, int nIters, T v1, T v2);
 
 
 // Forward Declarations
@@ -102,9 +102,9 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
 
     // Test to see if this device supports double precision
     int device;
-    cudaGetDevice(&device);
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, device);
+    hipGetDevice(&device);
+    hipDeviceProp_t deviceProp;
+    hipGetDeviceProperties(&deviceProp, device);
     bool doDouble = false;
     if ((deviceProp.major == 1 && deviceProp.minor >= 3) ||
             (deviceProp.major >= 2))
@@ -118,7 +118,7 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
     unsigned int halfNumFloats = halfBufSize / sizeof(float), numFloats = 2*halfNumFloats;
     float *gpu_mem, *hostMem;
     hostMem = new float[numFloats];
-    cudaMalloc((void**)&gpu_mem, halfBufSize*2);
+    hipMalloc((void**)&gpu_mem, halfBufSize*2);
     CHECK_CUDA_ERROR();
 
     // Initialize host data, with the first half the same as the second
@@ -129,16 +129,16 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
 
     // Variables used for timing
     float t = 0;
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    hipEvent_t start, stop;
+    hipEventCreate(&start);
+    hipEventCreate(&stop);
     CHECK_CUDA_ERROR();
 
     // copy host memory to GPU memory
-    cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-    cudaMemcpy(gpu_mem, hostMem, halfBufSize*2, cudaMemcpyHostToDevice);
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
+    hipEventRecord(start, 0); // do I even need this if I do not need the time?
+    hipMemcpy(gpu_mem, hostMem, halfBufSize*2, hipMemcpyHostToDevice);
+    hipEventRecord(stop, 0);
+	hipEventSynchronize(stop);
 
     // Thread block configuration
     dim3 threads(BLOCK_SIZE_SP,1,1);
@@ -154,18 +154,18 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
 
     // Benchmark the MulMAdd2 kernel to compute a scaling factor.
     t = 0.0f;
-    cudaEventRecord(start, 0);
-    MulMAdd2<float><<< blocks, threads >>>(gpu_mem, 10, 3.75, 0.355);
-    cudaEventRecord(stop, 0);
-    cudaEventSynchronize(stop);
+    hipEventRecord(start, 0);
+    hipLaunchKernel(HIP_KERNEL_NAME(MulMAdd2), dim3(blocks), dim3(threads), 0, 0, gpu_mem, 10, 3.75f, 0.355f);
+    hipEventRecord(stop, 0);
+    hipEventSynchronize(stop);
 //    CHECK_CUDA_ERROR();
-    cudaEventElapsedTime(&t, start, stop);
+    hipEventElapsedTime(&t, start, stop);
     t *= 1.e6;
     double repeatF = 1.1e07 / (double)t;
     fprintf (stdout, "Adjust repeat factor = %lg\n", repeatF);
 
     delete[] hostMem;
-    cudaFree((void*)gpu_mem);
+    hipFree((void*)gpu_mem);
     CHECK_CUDA_ERROR();
 
     // Initialize progress bar. We have 16 generic kernels and 2 hand tuned kernels.
@@ -242,7 +242,7 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
 
     // Allocate gpu memory
     float *target_sp;
-    cudaMalloc((void**)&target_sp, nbytes_sp);
+    hipMalloc((void**)&target_sp, nbytes_sp);
     CHECK_CUDA_ERROR();
 
     // Get a couple non-zero random numbers
@@ -257,12 +257,12 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
     for (int p = 0; p < passes; p++)
     {
         t = 0.0f;
-        cudaEventRecord(start, 0);
-        MAddU<<< blocks, threads >>>(target_sp, val1, val2);
-        cudaEventRecord(stop, 0);
-        cudaEventSynchronize(stop);
+        hipEventRecord(start, 0);
+        hipLaunchKernel(HIP_KERNEL_NAME(MAddU), dim3(blocks), dim3(threads),0,0,target_sp, val1, val2);
+        hipEventRecord(stop, 0);
+        hipEventSynchronize(stop);
         CHECK_CUDA_ERROR();
-        cudaEventElapsedTime(&t, start, stop);
+        hipEventElapsedTime(&t, start, stop);
         t /= 1.e3;
         // Add result
         char atts[1024];
@@ -276,12 +276,12 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
         if (!verbose && !quiet)
            pb.Show(stdout);
 
-        cudaEventRecord(start, 0);
-        MulMAddU<<< blocks, threads >>>(target_sp, val1, val2);
-        cudaEventRecord(stop, 0);
-        cudaEventSynchronize(stop);
+        hipEventRecord(start, 0);
+        hipLaunchKernel(HIP_KERNEL_NAME(MulMAddU), dim3(blocks), dim3(threads), 0, 0, target_sp, val1, val2);
+        hipEventRecord(stop, 0);
+        hipEventSynchronize(stop);
         CHECK_CUDA_ERROR();
-        cudaEventElapsedTime(&t, start, stop);
+        hipEventElapsedTime(&t, start, stop);
         t /= 1.e3;
 
         // Add result
@@ -295,14 +295,14 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
         if (!verbose && !quiet)
            pb.Show(stdout);
     }
-    cudaFree((void*)target_sp);
+    hipFree((void*)target_sp);
     CHECK_CUDA_ERROR();
 
     if (doDouble)
     {
         const int nbytes_dp = w * h * sizeof(double);
         double *target_dp;
-        cudaMalloc((void**)&target_dp, nbytes_dp);
+        hipMalloc((void**)&target_dp, nbytes_dp);
         CHECK_CUDA_ERROR();
 
         // Thread block configuration
@@ -313,12 +313,12 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
         for (int p = 0; p < passes; p++)
         {
 
-            cudaEventRecord(start, 0);
-            MAddU_DP<<< blocks, threads >>>(target_dp, val1, val2);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+            hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(MAddU_DP), dim3(blocks), dim3(threads), 0, 0,target_dp, val1, val2);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             CHECK_CUDA_ERROR();
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
 
             // Add result
@@ -333,12 +333,12 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
             if (!verbose && !quiet)
                pb.Show(stdout);
 
-            cudaEventRecord(start, 0);
-            MulMAddU_DP<<< blocks, threads >>>(target_dp, val1, val2);
-            cudaEventRecord(stop, 0);
-            cudaEventSynchronize(stop);
+			hipEventRecord(start, 0);
+            hipLaunchKernel(HIP_KERNEL_NAME(MulMAddU_DP), dim3(blocks), dim3(threads), 0, 0, target_dp, val1, val2);
+            hipEventRecord(stop, 0);
+            hipEventSynchronize(stop);
             CHECK_CUDA_ERROR();
-            cudaEventElapsedTime(&t, start, stop);
+            hipEventElapsedTime(&t, start, stop);
             t /= 1.e3;
 
             // Add result
@@ -352,7 +352,7 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
             if (!verbose && !quiet)
                pb.Show(stdout);
         }
-        cudaFree((void*)target_dp);
+        hipFree((void*)target_dp);
         CHECK_CUDA_ERROR();
     }
     else
@@ -371,8 +371,8 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
     if (!verbose)
         fprintf (stdout, "\n\n");
 
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    hipEventDestroy(start);
+    hipEventDestroy(stop);
 }
 
 // ****************************************************************************
@@ -414,14 +414,14 @@ RunTest(ResultDatabase &resultDB,
     hostMem = new T[numFloats];
     hostMem2 = new T[numFloats];
 
-    cudaMalloc((void**)&gpu_mem, numFloats*sizeof(T));
+    hipMalloc((void**)&gpu_mem, numFloats*sizeof(T));
     CHECK_CUDA_ERROR();
 
     // Variables used for timing
     float t = 0.0f;
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+    hipEvent_t start, stop;
+    hipEventCreate(&start);
+    hipEventCreate(&stop);
     CHECK_CUDA_ERROR();
 
     // Thread block configuration
@@ -439,19 +439,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Add1 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Add1<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Add1), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(10.0));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -466,10 +466,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -499,19 +499,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Add2 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Add2<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Add2), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(10.0));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -526,10 +526,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -558,19 +558,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Add4 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Add4<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Add4), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(10.0));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -585,10 +585,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -617,19 +617,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Add8 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Add8<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Add8), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(10.0));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -644,10 +644,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -677,19 +677,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Mul1 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Mul1<T><<< blocks, threads >>>(gpu_mem, realRepeats, 1.01);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Mul1), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(1.01));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -704,10 +704,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -737,19 +737,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Mul2 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Mul2<T><<< blocks, threads >>>(gpu_mem, realRepeats, 1.01);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Mul2), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(1.01));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -764,10 +764,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -796,19 +796,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Mul4 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Mul4<T><<< blocks, threads >>>(gpu_mem, realRepeats, 1.01);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Mul4), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(1.01));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -823,10 +823,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -855,19 +855,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the Mul8 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       Mul8<T><<< blocks, threads >>>(gpu_mem, realRepeats, 1.01);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(Mul8), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(1.01));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -882,10 +882,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -915,19 +915,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MAdd1 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MAdd1<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0, 0.9899);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MAdd1), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(10.0), T(0.9899));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -942,10 +942,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -975,19 +975,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MAdd2 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MAdd2<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0, 0.9899);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MAdd2), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(10.0), T(0.9899));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -1002,10 +1002,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -1034,19 +1034,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MAdd4 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MAdd4<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0, 0.9899);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MAdd4), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(10.0), T(0.9899));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -1061,10 +1061,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -1093,19 +1093,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MAdd8 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MAdd8<T><<< blocks, threads >>>(gpu_mem, realRepeats, 10.0, 0.9899);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MAdd8), dim3(blocks), dim3(threads), 0,0, gpu_mem, realRepeats, T(10.0), T(0.9899));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -1120,10 +1120,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -1153,19 +1153,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MulMAdd1 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MulMAdd1<T><<< blocks, threads >>>(gpu_mem, realRepeats, 3.75, 0.355);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MulMAdd1), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(3.75), T(0.355));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -1180,10 +1180,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -1213,19 +1213,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MulMAdd2 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MulMAdd2<T><<< blocks, threads >>>(gpu_mem, realRepeats, 3.75, 0.355);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MulMAdd2), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(3.75), T(0.355));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -1240,10 +1240,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -1272,19 +1272,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MulMAdd4 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MulMAdd4<T><<< blocks, threads >>>(gpu_mem, realRepeats, 3.75, 0.355);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MulMAdd4), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(3.75), T(0.355));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -1299,10 +1299,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -1331,19 +1331,19 @@ RunTest(ResultDatabase &resultDB,
        }
 
        // copy host memory to GPU memory
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), cudaMemcpyHostToDevice);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(gpu_mem, hostMem, numFloats*sizeof(T), hipMemcpyHostToDevice);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Execute the MulMAdd8 kernel
        t = 0.0f;
-       cudaEventRecord(start, 0);
-       MulMAdd8<T><<< blocks, threads >>>(gpu_mem, realRepeats, 3.75, 0.355);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0);
+       hipLaunchKernel(HIP_KERNEL_NAME(MulMAdd8), dim3(blocks), dim3(threads), 0, 0, gpu_mem, realRepeats, T(3.75), T(0.355));
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
        CHECK_CUDA_ERROR();
-       cudaEventElapsedTime(&t, start, stop);
+       hipEventElapsedTime(&t, start, stop);
        t *= 1.e6;
 
        // flopCount = numFloats(pixels) * flopCount/op * numLoopIters * unrollFactor * numStreams
@@ -1358,10 +1358,10 @@ RunTest(ResultDatabase &resultDB,
            hostMem2[j] = 0.0;
 
        // Read the result device memory back to the host
-       cudaEventRecord(start, 0); // do I even need this if I do not need the time?
-       cudaMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), cudaMemcpyDeviceToHost);
-       cudaEventRecord(stop, 0);
-       cudaEventSynchronize(stop);
+       hipEventRecord(start, 0); // do I even need this if I do not need the time?
+       hipMemcpy(hostMem2, gpu_mem, numFloats*sizeof(T), hipMemcpyDeviceToHost);
+       hipEventRecord(stop, 0);
+       hipEventSynchronize(stop);
 
        // Check the result -- At a minimum the first half of memory
        // should match the second half exactly
@@ -1385,11 +1385,11 @@ RunTest(ResultDatabase &resultDB,
 
     delete[] hostMem;
     delete[] hostMem2;
-    cudaFree((void*)gpu_mem);
+    hipFree((void*)gpu_mem);
     CHECK_CUDA_ERROR();
 
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    hipEventDestroy(start);
+    hipEventDestroy(stop);
 }
 
 
@@ -1460,9 +1460,9 @@ RunTest(ResultDatabase &resultDB,
 
 
 // Benchmark Kernels
-__global__ void MAddU(float *target, float val1, float val2)
+__global__ void MAddU(hipLaunchParm lp, float *target, float val1, float val2)
 {
-    int index = blockIdx.x*blockDim.x + threadIdx.x;
+    int index = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
 
     // Create a bunch of local variables we can use up to 32 steps..
     register float v0=val1,     v1=val2,     v2=v0+v1,    v3=v0+v2;
@@ -1498,9 +1498,9 @@ __global__ void MAddU(float *target, float val1, float val2)
     target[index] = result;
 }
 
-__global__ void MAddU_DP(double *target, double val1, double val2)
+__global__ void MAddU_DP(hipLaunchParm lp, double *target, double val1, double val2)
 {
-    int index = blockIdx.x*blockDim.x + threadIdx.x;
+    int index = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
     register double v0=val1,     v1=val2,     v2=v0+v1,    v3=v0+v2;
     register double v4=v0+v3,    v5=v0+v4,    v6=v0+v5,    v7=v0+v6;
     register double v8=v0+v7,    v9=v0+v8,    v10=v0+v9,   v11=v0+v10;
@@ -1534,9 +1534,9 @@ __global__ void MAddU_DP(double *target, double val1, double val2)
 }
 
 
-__global__ void MulMAddU(float *target, float val1, float val2)
+__global__ void MulMAddU(hipLaunchParm lp, float *target, float val1, float val2)
 {
-    int index = blockIdx.x*blockDim.x + threadIdx.x;
+    int index = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
 
     register float v0=val1,     v1=val2,     v2=v0+v1,    v3=v0+v2;
     register float v4=v0+v3,    v5=v0+v4,    v6=v0+v5,    v7=v0+v6;
@@ -1570,9 +1570,9 @@ __global__ void MulMAddU(float *target, float val1, float val2)
     target[index] = result;
 }
 
-__global__ void MulMAddU_DP(double *target, double val1, double val2)
+__global__ void MulMAddU_DP(hipLaunchParm lp, double *target, double val1, double val2)
 {
-    int index = blockIdx.x*blockDim.x + threadIdx.x;
+    int index = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
     register double v0=val1,     v1=val2,     v2=v0+v1,    v3=v0+v2;
     register double v4=v0+v3,    v5=v0+v4,    v6=v0+v5,    v7=v0+v6;
     register double v8=v0+v7,    v9=v0+v8,    v10=v0+v9,   v11=v0+v10;
@@ -1678,8 +1678,8 @@ __global__ void MulMAddU_DP(double *target, double val1, double val2)
 
 
 template <class T>
-__global__ void Add1(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Add1(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid];
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1692,8 +1692,8 @@ __global__ void Add1(T *data, int nIters, T v) {
 }
 
 template <class T>
-__global__ void Add2(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Add2(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1706,8 +1706,8 @@ __global__ void Add2(T *data, int nIters, T v) {
 }
 
 template <class T>
-__global__ void Add4(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Add4(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s, s3=9.0f-s, s4=9.0f-s2;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 10 operations.
@@ -1720,8 +1720,8 @@ __global__ void Add4(T *data, int nIters, T v) {
 }
 
 template <class T>
-__global__ void Add8(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Add8(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s, s3=9.0f-s, s4=9.0f-s2, s5=8.0f-s, s6=8.0f-s2, s7=7.0f-s, s8=7.0f-s2;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 5 operations.
@@ -1735,8 +1735,8 @@ __global__ void Add8(T *data, int nIters, T v) {
 
 
 template <class T>
-__global__ void Mul1(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Mul1(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid]-data[gid]+0.999f;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1749,8 +1749,8 @@ __global__ void Mul1(T *data, int nIters, T v) {
 }
 
 template <class T>
-__global__ void Mul2(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Mul2(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid]-data[gid]+0.999f, s2=s-0.0001f;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1763,8 +1763,8 @@ __global__ void Mul2(T *data, int nIters, T v) {
 }
 
 template <class T>
-__global__ void Mul4(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Mul4(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid]-data[gid]+0.999f, s2=s-0.0001f, s3=s-0.0002f, s4=s-0.0003f;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 10 operations.
@@ -1777,8 +1777,8 @@ __global__ void Mul4(T *data, int nIters, T v) {
 }
 
 template <class T>
-__global__ void Mul8(T *data, int nIters, T v) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void Mul8(hipLaunchParm lp, T *data, int nIters, T v) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid]-data[gid]+0.999f, s2=s-0.0001f, s3=s-0.0002f, s4=s-0.0003f, s5=s-0.0004f, s6=s-0.0005f, s7=s-0.0006f, s8=s-0.0007f;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 5 operations.
@@ -1792,8 +1792,8 @@ __global__ void Mul8(T *data, int nIters, T v) {
 
 
 template <class T>
-__global__ void MAdd1(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MAdd1(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid];
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1806,8 +1806,8 @@ __global__ void MAdd1(T *data, int nIters, T v1, T v2) {
 }
 
 template <class T>
-__global__ void MAdd2(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MAdd2(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1820,8 +1820,8 @@ __global__ void MAdd2(T *data, int nIters, T v1, T v2) {
 }
 
 template <class T>
-__global__ void MAdd4(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MAdd4(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s, s3=9.0f-s, s4=9.0f-s2;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 10 operations.
@@ -1834,8 +1834,8 @@ __global__ void MAdd4(T *data, int nIters, T v1, T v2) {
 }
 
 template <class T>
-__global__ void MAdd8(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MAdd8(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s, s3=9.0f-s, s4=9.0f-s2, s5=8.0f-s, s6=8.0f-s2, s7=7.0f-s, s8=7.0f-s2;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 5 operations.
@@ -1849,8 +1849,8 @@ __global__ void MAdd8(T *data, int nIters, T v1, T v2) {
 
 
 template <class T>
-__global__ void MulMAdd1(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MulMAdd1(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid];
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1863,8 +1863,8 @@ __global__ void MulMAdd1(T *data, int nIters, T v1, T v2) {
 }
 
 template <class T>
-__global__ void MulMAdd2(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MulMAdd2(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 20 operations.
@@ -1877,8 +1877,8 @@ __global__ void MulMAdd2(T *data, int nIters, T v1, T v2) {
 }
 
 template <class T>
-__global__ void MulMAdd4(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MulMAdd4(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s, s3=9.0f-s, s4=9.0f-s2;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 10 operations.
@@ -1891,8 +1891,8 @@ __global__ void MulMAdd4(T *data, int nIters, T v1, T v2) {
 }
 
 template <class T>
-__global__ void MulMAdd8(T *data, int nIters, T v1, T v2) {
-  int gid = blockIdx.x*blockDim.x + threadIdx.x;
+__global__ void MulMAdd8(hipLaunchParm lp, T *data, int nIters, T v1, T v2) {
+  int gid = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
   register T s = data[gid], s2=10.0f-s, s3=9.0f-s, s4=9.0f-s2, s5=8.0f-s, s6=8.0f-s2, s7=7.0f-s, s8=7.0f-s2;
   for (int j=0 ; j<nIters ; ++j) {
      /* Each macro op has 5 operations.
