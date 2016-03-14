@@ -9,11 +9,11 @@ include $(top_builddir)/config/targets.mk
 # How to find source files
 VPATH = $(srcdir):$(srcdir)/../../common:$(srcdir)/../../../common
 
-AM_LDFLAGS = $(CUDA_LDFLAGS)
-AM_CPPFLAGS = $(CUDA_INC)
+AM_LDFLAGS = $(HIP_LDFLAGS) -L/usr/lib/openmpi/lib -lmpi
+AM_CPPFLAGS = $(HIP_INC) -I/usr/lib/openmpi/include
 
 # What is the destination for programs built from this directory?
-serialcudadir = $(bindir)/Serial/CUDA
+serialcudadir = $(bindir)/Serial/HIP
 
 # What programs should be installed to that destination?
 serialcuda_PROGRAMS = Stencil2D
@@ -24,5 +24,5 @@ Stencil2D_SOURCES = CUDAStencil.cpp \
 				Stencil2Dmain.cpp \
 				CUDAStencilFactory.cpp \
                 main.cpp
-Stencil2D_LDADD = CUDAStencilKernel.o $(CUDA_LIBS) $(LIBS)
+Stencil2D_LDADD = CUDAStencilKernel.o $(HIP_LIBS) $(LIBS)
 

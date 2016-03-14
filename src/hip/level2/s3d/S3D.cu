@@ -1,6 +1,5 @@
 #include <cassert>
-#include <cuda.h>
-#include <cuda_runtime_api.h>
+#include <hip_runtime_api.h>
 #include <string>
 #include <sstream>
 #include "cudacommon.h"
@@ -92,9 +91,9 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
 
     // Check to see if the device supports double precision
     int device;
-    cudaGetDevice(&device);
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, device);
+    hipGetDevice(&device);
+    hipDeviceProp_t deviceProp;
+    hipGetDeviceProperties(&deviceProp, device);
     if ((deviceProp.major == 1 && deviceProp.minor >= 3) ||
                    (deviceProp.major >= 2))
     {
@@ -147,54 +146,54 @@ void RunTest(string testName, ResultDatabase &resultDB, OptionParser &op)
     real* gpu_molwt;
 
     // CUDA streams
-    cudaStream_t s1, s2;
+    hipStream_t s1, s2;
 
    // configure kernels for large L1 cache, as we don't need shared memory
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdsmh_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(gr_base, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt2_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt3_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt4_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt5_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt6_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt7_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt8_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratt9_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratx_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratxb_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratx2_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(ratx4_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(qssa_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(qssab_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(qssa2_kernel, cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot_kernel,
-//            cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot2_kernel,
-//            cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot3_kernel,
-//            cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot6_kernel,
-//            cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot7_kernel,
-//            cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot8_kernel,
-//            cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot9_kernel,
-//            cudaFuncCachePreferL1));
-//    CUDA_SAFE_CALL(cudaFuncSetCacheConfig(rdwdot10_kernel,
-//            cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdsmh_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(gr_base, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt2_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt3_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt4_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt5_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt6_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt7_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt8_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratt9_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratx_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratxb_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratx2_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(ratx4_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(qssa_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(qssab_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(qssa2_kernel, cudaFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot_kernel,
+//            hipFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot2_kernel,
+//            hipFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot3_kernel,
+//            hipFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot6_kernel,
+//            hipFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot7_kernel,
+//            hipFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot8_kernel,
+//            hipFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot9_kernel,
+//            hipFuncCachePreferL1));
+//    CUDA_SAFE_CALL(hipFuncSetCacheConfig(rdwdot10_kernel,
+//            hipFuncCachePreferL1));
 
     // Malloc host memory
-    CUDA_SAFE_CALL(cudaMallocHost((void**)&host_t,        n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMallocHost((void**)&host_p,        n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMallocHost((void**)&host_y, Y_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMallocHost((void**)&host_wdot,WDOT_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMallocHost((void**)&host_molwt,WDOT_SIZE*sizeof(real)));
+    CUDA_SAFE_CALL(hipMallocHost((void**)&host_t,        n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMallocHost((void**)&host_p,        n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMallocHost((void**)&host_y, Y_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMallocHost((void**)&host_wdot,WDOT_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMallocHost((void**)&host_molwt,WDOT_SIZE*sizeof(real)));
 
     // Create streams
-    CUDA_SAFE_CALL(cudaStreamCreate(&s1));
-    CUDA_SAFE_CALL(cudaStreamCreate(&s2));
+    CUDA_SAFE_CALL(hipStreamCreate(&s1));
+    CUDA_SAFE_CALL(hipStreamCreate(&s2));
 
     // Initialize Test Problem
 
@@ -232,17 +231,17 @@ void RunTest(string testName, ResultDatabase &resultDB, OptionParser &op)
     }
 
     // Malloc GPU memory
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_t, n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_p, n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_y, Y_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_wdot, WDOT_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_rf, RF_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_rb, RB_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_rklow, RKLOW_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_c, C_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_a, A_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_eg, EG_SIZE*n*sizeof(real)));
-    CUDA_SAFE_CALL(cudaMalloc((void**)&gpu_molwt, WDOT_SIZE*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_t, n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_p, n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_y, Y_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_wdot, WDOT_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_rf, RF_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_rb, RB_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_rklow, RKLOW_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_c, C_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_a, A_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_eg, EG_SIZE*n*sizeof(real)));
+    CUDA_SAFE_CALL(hipMalloc((void**)&gpu_molwt, WDOT_SIZE*sizeof(real)));
 
     // Get kernel launch config, assuming n is divisible by block size
     dim3 thrds(BLOCK_SIZE,1,1);
@@ -250,102 +249,102 @@ void RunTest(string testName, ResultDatabase &resultDB, OptionParser &op)
     dim3 thrds2(BLOCK_SIZE2,1,1);
     dim3 blks2(n / BLOCK_SIZE2,1,1);
 
-    cudaEvent_t start, stop;
-    CUDA_SAFE_CALL(cudaEventCreate(&start));
-    CUDA_SAFE_CALL(cudaEventCreate(&stop));
+    hipEvent_t start, stop;
+    CUDA_SAFE_CALL(hipEventCreate(&start));
+    CUDA_SAFE_CALL(hipEventCreate(&stop));
 
     // Download of gpu_t, gpu_p, gpu_y, gpu_molwt
-    CUDA_SAFE_CALL(cudaEventRecord(start, 0));
-    CUDA_SAFE_CALL(cudaMemcpyAsync(gpu_t, host_t, n*sizeof(real),
-            cudaMemcpyHostToDevice, s1));
-    CUDA_SAFE_CALL(cudaMemcpyAsync(gpu_p, host_p, n*sizeof(real),
-            cudaMemcpyHostToDevice, s2));
-    CUDA_SAFE_CALL(cudaMemcpyAsync(gpu_y, host_y, Y_SIZE*n*sizeof(real),
-            cudaMemcpyHostToDevice, s2));
-    CUDA_SAFE_CALL(cudaMemcpyAsync(gpu_molwt,host_molwt,WDOT_SIZE*sizeof(real),
-            cudaMemcpyHostToDevice, s2));
-    CUDA_SAFE_CALL(cudaEventRecord(stop, 0));
-    CUDA_SAFE_CALL(cudaEventSynchronize(stop));
+    CUDA_SAFE_CALL(hipEventRecord(start, 0));
+    CUDA_SAFE_CALL(hipMemcpyAsync(gpu_t, host_t, n*sizeof(real),
+            hipMemcpyHostToDevice, s1));
+    CUDA_SAFE_CALL(hipMemcpyAsync(gpu_p, host_p, n*sizeof(real),
+            hipMemcpyHostToDevice, s2));
+    CUDA_SAFE_CALL(hipMemcpyAsync(gpu_y, host_y, Y_SIZE*n*sizeof(real),
+            hipMemcpyHostToDevice, s2));
+    CUDA_SAFE_CALL(hipMemcpyAsync(gpu_molwt,host_molwt,WDOT_SIZE*sizeof(real),
+            hipMemcpyHostToDevice, s2));
+    CUDA_SAFE_CALL(hipEventRecord(stop, 0));
+    CUDA_SAFE_CALL(hipEventSynchronize(stop));
 
     // Get elapsed transfer time
     float iTransferTime = 0.0f;
-    cudaEventElapsedTime(&iTransferTime, start, stop);
+    hipEventElapsedTime(&iTransferTime, start, stop);
     iTransferTime *= 1.e-3;
 
     unsigned int passes = op.getOptionInt("passes");
     for (unsigned int i = 0; i < passes; i++)
     {
-        CUDA_SAFE_CALL(cudaEventRecord(start, 0));
-        ratt_kernel    <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, tconv);
+        CUDA_SAFE_CALL(hipEventRecord(start, 0));
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt_kernel),dim3(blks2),dim3(thrds2),0,s1, gpu_t, gpu_rf, tconv);
 
-        rdsmh_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_eg, tconv);
+        hipLaunchKernel(HIP_KERNEL_NAME(rdsmh_kernel),dim3(blks2),dim3(thrds2),0,s1, gpu_t, gpu_eg, tconv);
 
-        gr_base        <<<blks2,thrds2,0,s2>>>(gpu_p, gpu_t, gpu_y,
+        hipLaunchKernel(HIP_KERNEL_NAME(gr_base),dim3(blks2),dim3(thrds2),0,s2, gpu_p, gpu_t, gpu_y,
                                                gpu_c, tconv, pconv);
 
-        ratt2_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt2_kernel),dim3(blks2),dim3(thrds2),0,s1,gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt3_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt3_kernel),dim3(blks2),dim3(thrds2),0,s1, gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt4_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt4_kernel),dim3(blks2),dim3(thrds2),0,s1, gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt5_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt5_kernel),dim3(blks2),dim3(thrds2),0,s1, gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt6_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt6_kernel), dim3(blks2),dim3(thrds2),0,s1, gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt7_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt7_kernel),dim3(blks2),dim3(thrds2),0,s1,gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt8_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt8_kernel), dim3(blks2),dim3(thrds2),0,s1,gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt9_kernel   <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt9_kernel), dim3(blks2),dim3(thrds2),0,s1, gpu_t, gpu_rf, gpu_rb,
                 gpu_eg, tconv);
-        ratt10_kernel  <<<blks2,thrds2,0,s1>>>(gpu_t, gpu_rklow, tconv);
+        hipLaunchKernel(HIP_KERNEL_NAME(ratt10_kernel), dim3(blks2), dim3(thrds2) ,0,s1,gpu_t, gpu_rklow, tconv);
 
-        ratx_kernel    <<<blks, thrds, 0,s1>>>(gpu_t, gpu_c, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratx_kernel), dim3(blks), dim3(thrds), 0,s1, gpu_t, gpu_c, gpu_rf, gpu_rb,
                 gpu_rklow, tconv);
-        ratxb_kernel   <<<blks, thrds, 0,s1>>>(gpu_t, gpu_c, gpu_rf, gpu_rb,
+        hipLaunchKernel(HIP_KERNEL_NAME(ratxb_kernel), dim3(blks), dim3(thrds), 0,s1, gpu_t, gpu_c, gpu_rf, gpu_rb,
                 gpu_rklow, tconv);
-        ratx2_kernel   <<<blks2,thrds2,0,s1>>>(gpu_c, gpu_rf, gpu_rb);
-        ratx4_kernel   <<<blks2,thrds2,0,s1>>>(gpu_c, gpu_rf, gpu_rb);
+        hipLaunchKernel(HIP_KERNEL_NAME(ratx2_kernel), dim3(blks2), dim3(thrds2), 0, s1, gpu_c, gpu_rf, gpu_rb);
+        hipLaunchKernel(HIP_KERNEL_NAME(ratx4_kernel), dim3(blks2), dim3(thrds2),0,s1, gpu_c, gpu_rf, gpu_rb);
 
-        qssa_kernel    <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_a);
-        qssab_kernel   <<<blks, thrds, 0,s1>>>(gpu_rf, gpu_rb, gpu_a);
-        qssa2_kernel   <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_a);
+        hipLaunchKernel(HIP_KERNEL_NAME(qssa_kernel),dim3(blks2),dim3(thrds2),0,s1,gpu_rf, gpu_rb, gpu_a);
+        hipLaunchKernel(HIP_KERNEL_NAME(qssab_kernel),dim3(blks), dim3(thrds), 0,s1,gpu_rf, gpu_rb, gpu_a);
+        hipLaunchKernel(HIP_KERNEL_NAME(qssa2_kernel),dim3(blks2),dim3(thrds2),0,s1,gpu_rf, gpu_rb, gpu_a);
 
-        rdwdot_kernel  <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot_kernel), dim3(blks2), dim3(thrds2) ,0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        rdwdot2_kernel <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot2_kernel), dim3(blks2), dim3(thrds2),0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        rdwdot3_kernel <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot3_kernel), dim3(blks2), dim3(thrds2),0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        rdwdot6_kernel <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot6_kernel), dim3(blks2), dim3(thrds2),0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        rdwdot7_kernel <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot7_kernel), dim3(blks2), dim3(thrds2),0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        rdwdot8_kernel <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot8_kernel), dim3(blks2), dim3(thrds2),0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        rdwdot9_kernel <<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot9_kernel),dim3(blks2),dim3(thrds2),0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        rdwdot10_kernel<<<blks2,thrds2,0,s1>>>(gpu_rf, gpu_rb, gpu_wdot,
+        hipLaunchKernel(HIP_KERNEL_NAME(rdwdot10_kernel), dim3(blks2), dim3(thrds2),0,s1, gpu_rf, gpu_rb, gpu_wdot,
                 rateconv, gpu_molwt);
-        CUDA_SAFE_CALL(cudaEventRecord(stop, 0));
-        CUDA_SAFE_CALL(cudaEventSynchronize(stop));
+        CUDA_SAFE_CALL(hipEventRecord(stop, 0));
+        CUDA_SAFE_CALL(hipEventSynchronize(stop));
 
         // Get elapsed transfer time
         float kernelTime = 0.0f;
-        cudaEventElapsedTime(&kernelTime, start, stop);
+        hipEventElapsedTime(&kernelTime, start, stop);
         kernelTime *= 1.e-3;
 
         // Copy back result
-        CUDA_SAFE_CALL(cudaEventRecord(start, 0));
-        CUDA_SAFE_CALL(cudaMemcpyAsync(host_wdot, gpu_wdot,
-                WDOT_SIZE * n * sizeof(real), cudaMemcpyDeviceToHost, s1));
-        CUDA_SAFE_CALL(cudaEventRecord(stop, 0));
-        CUDA_SAFE_CALL(cudaEventSynchronize(stop));
+        CUDA_SAFE_CALL(hipEventRecord(start, 0));
+        CUDA_SAFE_CALL(hipMemcpyAsync(host_wdot, gpu_wdot,
+                WDOT_SIZE * n * sizeof(real), hipMemcpyDeviceToHost, s1));
+        CUDA_SAFE_CALL(hipEventRecord(stop, 0));
+        CUDA_SAFE_CALL(hipEventSynchronize(stop));
 
         // Get elapsed transfer time
         float oTransferTime = 0.0f;
-        cudaEventElapsedTime(&oTransferTime, start, stop);
+        hipEventElapsedTime(&oTransferTime, start, stop);
         oTransferTime *= 1.e-3;
 
         // Approximately 10k flops per grid point (estimated by Ramanan)
@@ -368,28 +367,28 @@ void RunTest(string testName, ResultDatabase &resultDB, OptionParser &op)
 //    printf("\n");
 
     // Destroy streams and events
-    CUDA_SAFE_CALL(cudaStreamDestroy(s1));
-    CUDA_SAFE_CALL(cudaStreamDestroy(s2));
-    CUDA_SAFE_CALL(cudaEventDestroy(start));
-    CUDA_SAFE_CALL(cudaEventDestroy(stop));
+    CUDA_SAFE_CALL(hipStreamDestroy(s1));
+    CUDA_SAFE_CALL(hipStreamDestroy(s2));
+    CUDA_SAFE_CALL(hipEventDestroy(start));
+    CUDA_SAFE_CALL(hipEventDestroy(stop));
 
     // Free GPU memory
-    CUDA_SAFE_CALL(cudaFree(gpu_t));
-    CUDA_SAFE_CALL(cudaFree(gpu_p));
-    CUDA_SAFE_CALL(cudaFree(gpu_y));
-    CUDA_SAFE_CALL(cudaFree(gpu_wdot));
-    CUDA_SAFE_CALL(cudaFree(gpu_rf));
-    CUDA_SAFE_CALL(cudaFree(gpu_rb));
-    CUDA_SAFE_CALL(cudaFree(gpu_c));
-    CUDA_SAFE_CALL(cudaFree(gpu_rklow));
-    CUDA_SAFE_CALL(cudaFree(gpu_a));
-    CUDA_SAFE_CALL(cudaFree(gpu_eg));
-    CUDA_SAFE_CALL(cudaFree(gpu_molwt));
+    CUDA_SAFE_CALL(hipFree(gpu_t));
+    CUDA_SAFE_CALL(hipFree(gpu_p));
+    CUDA_SAFE_CALL(hipFree(gpu_y));
+    CUDA_SAFE_CALL(hipFree(gpu_wdot));
+    CUDA_SAFE_CALL(hipFree(gpu_rf));
+    CUDA_SAFE_CALL(hipFree(gpu_rb));
+    CUDA_SAFE_CALL(hipFree(gpu_c));
+    CUDA_SAFE_CALL(hipFree(gpu_rklow));
+    CUDA_SAFE_CALL(hipFree(gpu_a));
+    CUDA_SAFE_CALL(hipFree(gpu_eg));
+    CUDA_SAFE_CALL(hipFree(gpu_molwt));
 
     // Free host memory
-    CUDA_SAFE_CALL(cudaFreeHost(host_t));
-    CUDA_SAFE_CALL(cudaFreeHost(host_p));
-    CUDA_SAFE_CALL(cudaFreeHost(host_y));
-    CUDA_SAFE_CALL(cudaFreeHost(host_wdot));
-    CUDA_SAFE_CALL(cudaFreeHost(host_molwt));
+    CUDA_SAFE_CALL(hipFreeHost(host_t));
+    CUDA_SAFE_CALL(hipFreeHost(host_p));
+    CUDA_SAFE_CALL(hipFreeHost(host_y));
+    CUDA_SAFE_CALL(hipFreeHost(host_wdot));
+    CUDA_SAFE_CALL(hipFreeHost(host_molwt));
 }

@@ -10,7 +10,7 @@
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT_THRD, RDWDOT_BLK)
-rdwdot_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot_kernel (hipLaunchParm lp, const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
     real ROP5 = ROP2(5) + ROP2(6) + ROP2(7) + ROP2(8);
@@ -41,7 +41,7 @@ rdwdot_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT2_THRD, RDWDOT2_BLK)
-rdwdot2_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot2_kernel (hipLaunchParm lp, const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
 
@@ -62,7 +62,7 @@ rdwdot2_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT3_THRD, RDWDOT3_BLK)
-rdwdot3_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot3_kernel (hipLaunchParm lp, const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
 
@@ -105,7 +105,7 @@ rdwdot3_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT6_THRD, RDWDOT6_BLK)
-rdwdot6_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot6_kernel (hipLaunchParm lp, const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
 
@@ -127,7 +127,7 @@ rdwdot6_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT7_THRD, RDWDOT7_BLK)
-rdwdot7_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot7_kernel (hipLaunchParm lp, const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
 
@@ -155,7 +155,7 @@ rdwdot7_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT8_THRD, RDWDOT8_BLK)
-rdwdot8_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot8_kernel (hipLaunchParm lp,const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
     real ROP12 = ROP2(12) + ROP2(13) + ROP2(14)+ ROP2(15);
@@ -181,7 +181,7 @@ rdwdot8_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT9_THRD, RDWDOT9_BLK)
-rdwdot9_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot9_kernel (hipLaunchParm lp, const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
     real ROP27 = ROP2(27) + ROP2(28);
@@ -205,7 +205,7 @@ rdwdot9_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDWDOT10_THRD, RDWDOT10_BLK)
-rdwdot10_kernel (const real* RESTRICT RKF, const real* RESTRICT RKR,
+rdwdot10_kernel (hipLaunchParm lp, const real* RESTRICT RKF, const real* RESTRICT RKR,
         real* RESTRICT WDOT, real rateconv, const real* RESTRICT molwt)
 {
 

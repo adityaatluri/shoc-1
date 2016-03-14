@@ -742,3 +742,4 @@ __global__ void BFS_kernel_multi_block_spill(
     volatile unsigned int *frontier_length,
     const unsigned int max_mem) { ; }
 #endif
+

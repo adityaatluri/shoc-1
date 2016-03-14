@@ -10,8 +10,10 @@ include $(top_builddir)/config/targets.mk
 # How to find source files
 VPATH = $(srcdir):$(srcdir)/../common
 VPATH = $(srcdir):$(srcdir)/../../common
+VPATH = $(srcdir):$(srcdir)/epmpi
+
 AM_LDFLAGS = $(HIP_LDFLAGS)
-AM_CPPFLAGS = $(HIP_INC)
+AM_CPPFLAGS = $(HIP_INC) -Wdeprecated-register
 
 # What is the destination for programs built from this directory?
 serialhipdir = $(bindir)/Serial/HIP
@@ -22,7 +24,7 @@ serialhip_PROGRAMS = BusSpeedDownload \
 						DeviceMemory \
 						MaxFlops
 
-BusSpeedDownload_SOURCES	= main.cpp 
+BusSpeedDownload_SOURCES	= main.cpp
 BusSpeedDownload_LDADD		= BusSpeedDownload.o $(HIP_LIBS) $(LIBS)
 
 BusSpeedReadback_SOURCES	= main.cpp

@@ -6,7 +6,7 @@
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (QSSA_THRD, QSSA_BLK)
-qssa_kernel(real* RESTRICT RF, real* RESTRICT RB, real* RESTRICT A) {
+qssa_kernel(hipLaunchParm lp, real* RESTRICT RF, real* RESTRICT RB, real* RESTRICT A) {
 
     register real DEN;
 
@@ -128,7 +128,7 @@ qssa_kernel(real* RESTRICT RF, real* RESTRICT RB, real* RESTRICT A) {
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (QSSAB_THRD, QSSAB_BLK)
-qssab_kernel(real* RESTRICT RF, real* RESTRICT RB, real* RESTRICT A)
+qssab_kernel(hipLaunchParm lp, real* RESTRICT RF, real* RESTRICT RB, real* RESTRICT A)
 {
 
     register real DEN;

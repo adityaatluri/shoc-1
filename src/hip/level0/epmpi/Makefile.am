@@ -9,7 +9,7 @@ CXX = ${HIPCC}
 CXXLD = ${HIPCC}
 
 AM_LDFLAGS = $(HIP_LDFLAGS)
-AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -D__HIP_PLATFORM_HCC__= -I/opt/hcc/include -I/usr/lib/openmpi/include
+AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -D__HIP_PLATFORM_HCC__= -I/opt/hcc/include -I/usr/lib/openmpi/include -Wdeprecated-register 
 
 # What is the destination for programs built from this directory?
 epcudadir = $(bindir)/EP/HIP
@@ -21,7 +21,7 @@ epcuda_PROGRAMS = BusSpeedDownload \
 						MaxFlops
 
 BusSpeedDownload_SOURCES	= main.cpp
-BusSpeedDownload_LDADD		= BusSpeedDownload.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o -lstdc++ -lc++ -lSHOCCommon -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm -L/usr/lib/openmpi/lib -lmpi -lhwloc $(HIP_LIBS) $(LIBS) 
+BusSpeedDownload_LDADD		= BusSpeedDownload.o $(HIP_PATH)/src/hip_hcc.o -lstdc++ -lc++ -lSHOCCommon -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm -L/usr/lib/openmpi/lib -lmpi -lhwloc $(HIP_LIBS) $(LIBS) 
 
 BusSpeedReadback_SOURCES	= main.cpp
 BusSpeedReadback_LDADD		= BusSpeedReadback.o /home/aditya/Documents/HIP-privatestaging/src/hip_hcc.o -lstdc++ -lc++ -lSHOCCommon -L/opt/hcc/lib -L/opt/hsa/lib -lhc_am -lhsa-runtime64 -ldl -lpthread -lmcwamp -lm -L/usr/lib/openmpi/lib -lmpi -lhwloc $(HIP_LIBS) $(LIBS) 

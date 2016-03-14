@@ -2,15 +2,15 @@
 #define GETRATES_BASE_H
 
 #include "S3D.h"
-
+#include "hip_runtime.h"
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (GR_BASE_THRD, GR_BASE_BLK)
-gr_base(const real* P, const real* T, const real* Y, real* C, real TCONV,
+gr_base(hipLaunchParm lp, const real* P, const real* T, const real* Y, real* C, real TCONV,
         real PCONV) {
 
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
-    const real PRES = P[threadIdx.x + (blockIdx.x * blockDim.x)]*PCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
+    const real PRES = P[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*PCONV;
     const real SMALL = FLT_MIN;
 
     real SUM, ctmp;

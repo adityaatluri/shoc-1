@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "cudacommon.h"
 #include <cuda.h>
-#include <cuda_runtime_api.h>
+#include <hip_runtime_api.h>
 #include "PMSMemMgr.h"
 
 template<typename T>
@@ -15,13 +15,13 @@ public:
     {
         T* ret = NULL;
         size_t nBytes = nItems * sizeof(T);
-        CUDA_SAFE_CALL(cudaMallocHost((void**)&ret, nBytes));
+        CUDA_SAFE_CALL(hipMallocHost((void**)&ret, nBytes));
         return ret;
     }
 
     virtual void ReleaseHostBuffer( T* buf )
     {
-        CUDA_SAFE_CALL(cudaFreeHost(buf));
+        CUDA_SAFE_CALL(hipFreeHost(buf));
     }
 };
 

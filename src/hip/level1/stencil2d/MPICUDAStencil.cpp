@@ -4,7 +4,7 @@
 #include <iomanip>
 #include <cassert>
 #include "MPICUDAStencil.h"
-#include "cuda_runtime.h"
+#include "hip_runtime.h"
 
 
 template<class T>

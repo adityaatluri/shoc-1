@@ -1,7 +1,7 @@
 #include "cudacommon.h"
 #include <cassert>
 #include <cuda.h>
-#include <hip_runtime_api.h>
+#include "hip_runtime_api.h"
 #include <iostream>
 #include "OptionParser.h"
 #include "ResultDatabase.h"
@@ -25,7 +25,7 @@ struct texReaderDP {
    __device__ __forceinline__ double operator()(const int idx) const
    {
        int2 v = tex1Dfetch(vecTexD, idx);
-#if (__HIP_ARCH__ < 130)
+#if (__CUDA_ARCH__ < 130)
        // Devices before arch 130 don't support DP, and having the
        // __hiloint2double() intrinsic will cause compilation to fail.
        // This return statement added as a workaround -- it will compile,
@@ -48,7 +48,7 @@ spmv_csr_scalar_kernel(const fpType * __restrict__ val,
 template <typename fpType, typename texReader>
 __global__ void
 spmv_csr_vector_kernel(const fpType * __restrict__ val,
-				       const int    * __restrict__ cols,
+             	       const int    * __restrict__ cols,
 		               const int    * __restrict__ rowDelimiters,
                        const int dim, fpType * __restrict__ out);
 
@@ -218,13 +218,13 @@ void csrTest(ResultDatabase& resultDB, OptionParser& op, floatType* h_val,
       string suffix;
       if (sizeof(floatType) == sizeof(float))
       {
-          hipChannelFormatDesc channelDesc = hipCreateChannelDesc<float>();
+          hipChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
           CUDA_SAFE_CALL(hipBindTexture(0, vecTex, d_vec, channelDesc,
                   numRows * sizeof(float)));
           suffix = "-SP";
       }
       else {
-          hipChannelFormatDesc channelDesc = hipCreateChannelDesc<int2>();
+          hipChannelFormatDesc channelDesc = cudaCreateChannelDesc<int2>();
           CUDA_SAFE_CALL(hipBindTexture(0, vecTexD, d_vec, channelDesc,
                   numRows * sizeof(int2)));
           suffix = "-DP";
@@ -250,7 +250,9 @@ void csrTest(ResultDatabase& resultDB, OptionParser& op, floatType* h_val,
           CUDA_SAFE_CALL(hipEventRecord(start, 0));
           for (int j = 0; j < iters; j++)
           {
-              hipLaunchKernel(HIP_KERNEL_NAME(spmv_csr_scalar_kernel<floatType, texReader>), dim3(nBlocksScalar), dim3(BLOCK_SIZE), 0, 0, d_val, d_cols, d_rowDelimiters, numRows, d_out);
+              spmv_csr_scalar_kernel<floatType, texReader>
+              <<<nBlocksScalar, BLOCK_SIZE>>>
+              (d_val, d_cols, d_rowDelimiters, numRows, d_out);
           }
           CUDA_SAFE_CALL(hipEventRecord(stop, 0));
           CUDA_SAFE_CALL(hipEventSynchronize(stop));
@@ -277,8 +279,8 @@ void csrTest(ResultDatabase& resultDB, OptionParser& op, floatType* h_val,
           resultDB.AddResult(testName+"_PCIe", atts, "Gflop/s",
                             gflop / (scalarKernelTime+totalTransfer));
       }
-      hipLaunchKernel(HIP_KERNEL_NAME(zero<floatType>), dim3(nBlocksScalar), dim3(BLOCK_SIZE), 0, 0, d_out, numRows);
-      hipDeviceSynchronize();
+      zero<floatType><<<nBlocksScalar, BLOCK_SIZE>>>(d_out, numRows);
+      hipThreadSynchronize();
 
       cout << "CSR Vector Kernel\n";
       for (int k=0; k<passes; k++)
@@ -287,7 +289,9 @@ void csrTest(ResultDatabase& resultDB, OptionParser& op, floatType* h_val,
           CUDA_SAFE_CALL(hipEventRecord(start, 0));
           for (int j = 0; j < iters; j++)
           {
-              hipLaunchKernel(HIP_KERNEL_NAME(spmv_csr_vector_kernel<floatType, texReader>), dim3(nBlocksVector), dim3(BLOCK_SIZE), 0, 0, d_val, d_cols, d_rowDelimiters, numRows, d_out);
+              spmv_csr_vector_kernel<floatType, texReader>
+              <<<nBlocksVector, BLOCK_SIZE>>>
+              (d_val, d_cols, d_rowDelimiters, numRows, d_out);
           }
           CUDA_SAFE_CALL(hipEventRecord(stop, 0));
           CUDA_SAFE_CALL(hipEventSynchronize(stop));
@@ -295,7 +299,7 @@ void csrTest(ResultDatabase& resultDB, OptionParser& op, floatType* h_val,
           CUDA_SAFE_CALL(hipEventElapsedTime(&vectorKernelTime, start, stop));
           CUDA_SAFE_CALL(hipMemcpy(h_out, d_out, numRows * sizeof(floatType),
                   hipMemcpyDeviceToHost));
-          hipDeviceSynchronize();
+          hipThreadSynchronize();
           // Compare reference solution to GPU result
           if (! verifyResults(refOut, h_out, numRows, k))
           {
@@ -375,13 +379,13 @@ void ellPackTest(ResultDatabase& resultDB, OptionParser& op, floatType* h_val,
     // Bind texture for position
     if (sizeof(floatType) == sizeof(float))
     {
-        hipChannelFormatDesc channelDesc = hipCreateChannelDesc<float>();
+        hipChannelFormatDesc channelDesc = cudaCreateChannelDesc<float>();
         CUDA_SAFE_CALL(hipBindTexture(0, vecTex, d_vec, channelDesc,
                 numRows * sizeof(float)));
     }
     else
     {
-        hipChannelFormatDesc channelDesc = hipCreateChannelDesc<int2>();
+        hipChannelFormatDesc channelDesc = cudaCreateChannelDesc<int2>();
         CUDA_SAFE_CALL(hipBindTexture(0, vecTexD, d_vec, channelDesc,
                 numRows * sizeof(int2)));
     }
@@ -396,7 +400,8 @@ void ellPackTest(ResultDatabase& resultDB, OptionParser& op, floatType* h_val,
         CUDA_SAFE_CALL(hipEventRecord(start, 0));
         for (int j = 0; j < iters; j++)
         {
-            hipLaunchKernel(HIP_KERNEL_NAME(spmv_ellpackr_kernel<floatType, texReader>), dim3(nBlocks), dim3(BLOCK_SIZE), 0, 0, d_val, d_cols, d_rowLengths, cmSize, d_out);
+            spmv_ellpackr_kernel<floatType, texReader><<<nBlocks, BLOCK_SIZE>>>
+                    (d_val, d_cols, d_rowLengths, cmSize, d_out);
         }
         CUDA_SAFE_CALL(hipEventRecord(stop, 0));
         CUDA_SAFE_CALL(hipEventSynchronize(stop));
@@ -564,7 +569,7 @@ void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
 {
     int device;
     hipGetDevice(&device);
-    hipDeviceProp_t deviceProp;
+    hipDeviceProp deviceProp;
     hipGetDeviceProperties(&deviceProp, device);
     bool doDouble = false;
     if ((deviceProp.major == 1 && deviceProp.minor >= 3) ||
@@ -667,7 +672,7 @@ spmv_csr_scalar_kernel(const fpType * __restrict__ val,
                        const int    * __restrict__ rowDelimiters,
                        const int dim, fpType * __restrict__ out)
 {
-    int myRow = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    int myRow = blockIdx.x * blockDim.x + threadIdx.x;
     texReader vecTexReader;
 
     if (myRow < dim)
@@ -718,12 +723,12 @@ spmv_csr_vector_kernel(const fpType * __restrict__ val,
                        const int dim, fpType * __restrict__ out)
 {
     // Thread ID in block
-    int t = hipThreadIdx_x;
+    int t = threadIdx.x;
     // Thread ID within warp
     int id = t & (warpSize-1);
-    int warpsPerBlock = hipBlockDim_x / warpSize;
+    int warpsPerBlock = blockDim.x / warpSize;
     // One row per warp
-    int myRow = (hipBlockIdx_x * warpsPerBlock) + (t / warpSize);
+    int myRow = (blockIdx.x * warpsPerBlock) + (t / warpSize);
     // Texture reader for the dense vector
     texReader vecTexReader;
 
@@ -788,7 +793,7 @@ spmv_ellpackr_kernel(const fpType * __restrict__ val,
                      const int    * __restrict__ rowLengths,
                      const int dim, fpType * __restrict__ out)
 {
-    int t = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
     texReader vecTexReader;
 
     if (t < dim)
@@ -808,7 +813,6 @@ template <typename fpType>
 __global__ void
 zero(fpType * __restrict__ a, const int size)
 {
-    int t = hipBlockIdx_x * hipBlockDim_x + hipThreadIdx_x;
+    int t = blockIdx.x * blockDim.x + threadIdx.x;
     if (t < size) a[t] = 0;
 }
-

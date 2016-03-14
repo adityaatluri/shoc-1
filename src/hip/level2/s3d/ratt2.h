@@ -8,11 +8,11 @@
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT2_THRD, RATT2_BLK)
-ratt2_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
+ratt2_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
         const real* RESTRICT EG, real TCONV)
 {
 
-    real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     real ALOGT = LOG(TEMP);
 
     const register real SMALL_INV = 1e37f;
@@ -102,11 +102,11 @@ ratt2_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT3_THRD, RATT3_BLK)
-ratt3_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
+ratt3_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
         const real* RESTRICT EG, real TCONV)
 {
 
-    real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     real ALOGT = LOG(TEMP);
     const register real SMALL_INV = 1e37f;
     const real RU=8.31451e7;
@@ -194,11 +194,11 @@ ratt3_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT4_THRD, RATT4_BLK)
-ratt4_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
+ratt4_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
         const real* RESTRICT EG, real TCONV)
 {
 
-    real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     real ALOGT = LOG(TEMP);
     const register real SMALL_INV = 1e37f;
     const real RU=8.31451e7;
@@ -285,11 +285,11 @@ ratt4_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT5_THRD, RATT5_BLK)
-ratt5_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
+ratt5_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
         const real* RESTRICT EG, real TCONV)
 {
 
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real ALOGT = LOG(TEMP);
     const register real SMALL_INV = 1e37f;
     const real RU=8.31451e7;
@@ -378,11 +378,11 @@ ratt5_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT6_THRD, RATT6_BLK)
-ratt6_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
+ratt6_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
         const real* RESTRICT EG, real TCONV)
 {
 
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real ALOGT = LOG(TEMP);
     const register real SMALL_INV = 1e37f;
     const real RU=8.31451e7;
@@ -469,10 +469,10 @@ ratt6_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT7_THRD, RATT7_BLK)
-ratt7_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
+ratt7_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
         const real* RESTRICT EG, real TCONV)
 {
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real ALOGT = LOG(TEMP);
     const register real SMALL_INV = 1e37f;
     const real RU=8.31451e7;
@@ -559,11 +559,11 @@ ratt7_kernel(const real* RESTRICT T, const real* RESTRICT RF, real* RESTRICT RB,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT8_THRD, RATT8_BLK)
-ratt8_kernel(const real* RESTRICT T, const real* RESTRICT RF,
+ratt8_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF,
         real* RESTRICT RB, const real* RESTRICT EG, real TCONV)
 {
 
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real ALOGT = LOG(TEMP);
     const register real SMALL_INV = 1e37f;
     const real RU=8.31451e7;
@@ -650,11 +650,11 @@ ratt8_kernel(const real* RESTRICT T, const real* RESTRICT RF,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT9_THRD, RATT9_BLK)
-ratt9_kernel(const real* RESTRICT T, const real* RESTRICT RF,
+ratt9_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT RF,
         real* RESTRICT RB, const real* RESTRICT EG, real TCONV)
 {
 
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real ALOGT = LOG(TEMP);
     const register real SMALL_INV = 1e37f;
     const real RU=8.31451e7;
@@ -759,10 +759,10 @@ ratt9_kernel(const real* RESTRICT T, const real* RESTRICT RF,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT10_THRD, RATT10_BLK)
-ratt10_kernel(const real* RESTRICT T, real* RESTRICT RKLOW, real TCONV)
+ratt10_kernel(hipLaunchParm lp, const real* RESTRICT T, real* RESTRICT RKLOW, real TCONV)
 {
 
-    const register real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const register real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const register real ALOGT = LOG(TEMP);
 
     RKLOW(1) = EXP(4.22794408e1 -9.e-1*ALOGT + DIV(8.55468335e2,TEMP));

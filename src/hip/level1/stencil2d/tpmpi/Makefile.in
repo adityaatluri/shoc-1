@@ -174,7 +174,7 @@ CUDA_CPPFLAGS = @CUDA_CPPFLAGS@
 CUDA_INCDIR = @CUDA_INCDIR@
 
 # Which compiler to use to build and link
-CXX = ${MPICXX}
+CXX = ${HIPCC}
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -284,12 +284,12 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 with_hip = @with_hip@
-CXXLD = ${MPICXX}
-AM_LDFLAGS = $(CUDA_LDFLAGS)
-AM_CPPFLAGS = $(CUDA_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common
+CXXLD = ${HIPCC}
+AM_LDFLAGS = $(HIP_LDFLAGS) -L/usr/lib/openmpi/lib -lmpi
+AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -I/usr/lib/openmpi/include
 
 # What is the destination for programs built from this directory?
-tpcudadir = $(bindir)/TP/CUDA
+tpcudadir = $(bindir)/TP/HIP
 
 # How to build those programs?
 Stencil2D_SOURCES = CUDAStencil.cpp \
@@ -298,7 +298,7 @@ Stencil2D_SOURCES = CUDAStencil.cpp \
 				CUDAStencilFactory.cpp \
                 main.cpp
 
-Stencil2D_LDADD = CUDAStencilKernel.o $(CUDA_LIBS) $(LIBS)
+Stencil2D_LDADD = CUDAStencilKernel.o $(HIP_LIBS) $(LIBS)
 all: all-am
 
 .SUFFIXES:

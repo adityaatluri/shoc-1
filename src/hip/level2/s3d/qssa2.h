@@ -6,7 +6,7 @@
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (QSSA2_THRD, QSSA2_BLK)
-qssa2_kernel(real* RESTRICT RF, real* RESTRICT RB, const real* RESTRICT A)
+qssa2_kernel(hipLaunchParm lp, real* RESTRICT RF, real* RESTRICT RB, const real* RESTRICT A)
 {
 
     register real xq4 = A(4,0);

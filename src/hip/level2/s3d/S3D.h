@@ -158,8 +158,8 @@ __device__ __forceinline__ float LOG10<float>(float in)
 }
 
 //Kernel indexing macros
-#define N_GP (blockDim.x * gridDim.x) // number of grid points
-#define thread_num (threadIdx.x + (blockIdx.x * blockDim.x))
+#define N_GP (hipBlockDim_x * hipGridDim_x) // number of grid points
+#define thread_num (hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x))
 #define idx2(p,z) (p[(((z)-1)*(N_GP)) + thread_num])
 #define idx(x, y) ((x)[(y)-1])
 

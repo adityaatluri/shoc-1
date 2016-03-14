@@ -7,10 +7,10 @@
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATX_THRD, RATX_BLK)
-ratx_kernel(const real* RESTRICT T, const real* RESTRICT C, real* RESTRICT RF,
+ratx_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT C, real* RESTRICT RF,
         real* RESTRICT RB, const real* RESTRICT RKLOW, real TCONV)
 {
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real ALOGT = LOG((TEMP));
     real CTOT = 0.0;
     register real PR, PCOR, PRLOG, FCENT, FCLOG, XN;
@@ -207,10 +207,10 @@ ratx_kernel(const real* RESTRICT T, const real* RESTRICT C, real* RESTRICT RF,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATXB_THRD, RATXB_BLK)
-ratxb_kernel(const real* RESTRICT T, const real* RESTRICT C, real* RESTRICT RF,
+ratxb_kernel(hipLaunchParm lp, const real* RESTRICT T, const real* RESTRICT C, real* RESTRICT RF,
         real* RESTRICT RB, const real* RESTRICT RKLOW, real TCONV)
 {
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real ALOGT = LOG((TEMP));
     real CTOT = 0.0;
     register real PR, PCOR, PRLOG, FCENT, FCLOG, XN;
@@ -398,7 +398,7 @@ ratxb_kernel(const real* RESTRICT T, const real* RESTRICT C, real* RESTRICT RF,
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATX2_THRD, RATX2_BLK)
-ratx2_kernel(const real* RESTRICT C, real* RESTRICT RF, real* RESTRICT RB)
+ratx2_kernel(hipLaunchParm lp, const real* RESTRICT C, real* RESTRICT RF, real* RESTRICT RB)
 {
 
     RF(1) = RF(1)*C(2)*C(4);
@@ -597,7 +597,7 @@ ratx2_kernel(const real* RESTRICT C, real* RESTRICT RF, real* RESTRICT RB)
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATX4_THRD, RATX4_BLK)
-ratx4_kernel(const real* RESTRICT C, real* RESTRICT RF, real* RESTRICT RB)
+ratx4_kernel(hipLaunchParm lp, const real* RESTRICT C, real* RESTRICT RF, real* RESTRICT RB)
 {
     RB(1) = RB(1)*C(3)*C(5);
     RB(2) = RB(2)*C(2)*C(5);

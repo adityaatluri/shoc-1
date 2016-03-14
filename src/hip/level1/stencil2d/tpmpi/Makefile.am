@@ -5,14 +5,14 @@ include $(top_builddir)/config/targets.mk
 VPATH = $(srcdir)/..:$(srcdir)/../../../common:$(srcdir)/../../../../common
 
 # Which compiler to use to build and link
-CXX = ${MPICXX}
-CXXLD = ${MPICXX}
+CXX = ${HIPCC}
+CXXLD = ${HIPCC}
 
-AM_LDFLAGS = $(CUDA_LDFLAGS)
-AM_CPPFLAGS = $(CUDA_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common
+AM_LDFLAGS = $(HIP_LDFLAGS) -L/usr/lib/openmpi/lib -lmpi
+AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -I/usr/lib/openmpi/include
 
 # What is the destination for programs built from this directory?
-tpcudadir = $(bindir)/TP/CUDA
+tpcudadir = $(bindir)/TP/HIP
 
 # What programs should be installed to that destination?
 tpcuda_PROGRAMS = Stencil2D
@@ -23,5 +23,5 @@ Stencil2D_SOURCES = CUDAStencil.cpp \
 				Stencil2Dmain.cpp \
 				CUDAStencilFactory.cpp \
                 main.cpp
-Stencil2D_LDADD = CUDAStencilKernel.o $(CUDA_LIBS) $(LIBS)
+Stencil2D_LDADD = CUDAStencilKernel.o $(HIP_LIBS) $(LIBS)
 

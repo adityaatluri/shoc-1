@@ -295,7 +295,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 with_hip = @with_hip@
-SUBDIRS = level0 level1 #level2
+SUBDIRS = level0 level1 level2
 all: all-recursive
 
 .SUFFIXES:

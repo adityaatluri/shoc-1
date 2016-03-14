@@ -5,11 +5,11 @@ include $(top_builddir)/config/targets.mk
 VPATH = $(srcdir)/..:$(srcdir)/../../../common:$(srcdir)/../../../../common
 
 # Which compiler to use to build and link
-CXX = ${MPICXX}
-CXXLD = ${MPICXX}
+CXX = ${HIPCC}
+CXXLD = ${HIPCC}
 
 AM_LDFLAGS = $(HIP_LDFLAGS)
-AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common
+AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -D__HIP_PLATFORM_HCC__= -I/opt/hcc/include -I/usr/lib/openmpi/include
 
 # What is the destination for programs built from this directory?
 ephipdir = $(bindir)/EP/HIP
@@ -18,7 +18,7 @@ ephipdir = $(bindir)/EP/HIP
 ephip_PROGRAMS = BFS
 
 # How to build those programs?
-BFS_SOURCES = Graph.cpp \
+BFS_SOURCES = Graph.cu \
 				main.cpp
 BFS_LDADD = BFS.o bfs_kernel.o $(HIP_LIBS) $(LIBS)
 

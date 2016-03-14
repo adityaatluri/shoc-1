@@ -92,7 +92,7 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(ephipdir)"
 PROGRAMS = $(ephip_PROGRAMS)
-am_BFS_OBJECTS = Graph.$(OBJEXT) main.$(OBJEXT)
+am_BFS_OBJECTS = main.$(OBJEXT)
 BFS_OBJECTS = $(am_BFS_OBJECTS)
 am__DEPENDENCIES_1 =
 BFS_DEPENDENCIES = BFS.o bfs_kernel.o $(am__DEPENDENCIES_1)
@@ -172,7 +172,7 @@ CUDA_CPPFLAGS = @CUDA_CPPFLAGS@
 CUDA_INCDIR = @CUDA_INCDIR@
 
 # Which compiler to use to build and link
-CXX = ${MPICXX}
+CXX = ${HIPCC}
 CXXCPP = @CXXCPP@
 CXXDEPMODE = @CXXDEPMODE@
 CXXFLAGS = @CXXFLAGS@
@@ -282,15 +282,15 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 with_hip = @with_hip@
-CXXLD = ${MPICXX}
+CXXLD = ${HIPCC}
 AM_LDFLAGS = $(HIP_LDFLAGS)
-AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common
+AM_CPPFLAGS = $(HIP_INC) $(MPI_CPPFLAGS) -I$(top_srcdir)/src/mpi/common -D__HIP_PLATFORM_HCC__= -I/opt/hcc/include -I/usr/lib/openmpi/include
 
 # What is the destination for programs built from this directory?
 ephipdir = $(bindir)/EP/HIP
 
 # How to build those programs?
-BFS_SOURCES = Graph.cpp \
+BFS_SOURCES = Graph.cu \
 				main.cpp
 
 BFS_LDADD = BFS.o bfs_kernel.o $(HIP_LIBS) $(LIBS)
@@ -381,7 +381,6 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/Graph.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 
 .cpp.o:

@@ -1,25 +1,30 @@
-#include <cuda.h>
-#include <fstream>
-#include <iostream>
-#include <limits.h>
-#include <string.h>
-
 #include "bfs_kernel.h"
-#include "cudacommon.h"
-#include "Graph.h"
-#include "OptionParser.h"
-#include "ResultDatabase.h"
-#include "Timer.h"
 
+// BFS depends on atomic instructions.  NVCC will generate errors if
+// the code is compiled for CC < 1.2.  So, we use this macro and stubs
+// so the code will compile cleanly.  If run on CC < 1.2, it will
+// return a "NoResult" flag.
+#if __HIP_ARCH_HAS_GLOBAL_INT32_ATOMICS__ 
 
+//Sungpack Hong, Sang Kyun Kim, Tayo Oguntebi, and Kunle Olukotun. 2011.
+//Accelerating CUDA graph algorithms at maximum warp.
+//In Proceedings of the 16th ACM symposium on Principles and practice of
+//parallel programming (PPoPP '11). ACM, New York, NY, USA, 267-276.
 // ****************************************************************************
-// Function: addBenchmarkSpecOptions
+// Function: BFS_kernel_warp
 //
 // Purpose:
-//   Add benchmark specific options parsing
+//   Perform BFS on the given graph
 //
 // Arguments:
-//   op: the options parser / parameter database
+//   levels: array that stores the level of vertices
+//   edgeArray: array that gives offset of a vertex in edgeArrayAux
+//   edgeArrayAux: array that gives the edge list of a vertex
+//   W_SZ: the warp size to use to process vertices
+//   CHUNK_SZ: the number of vertices each warp processes
+//   numVertices: number of vertices in the given graph
+//   curr: the current BFS level
+//   flag: set when more vertices remain to be traversed
 //
 // Returns:  nothing
 //
@@ -29,33 +34,68 @@
 // Modifications:
 //
 // ****************************************************************************
-//TODO: Check if hostfile option in driver file adds automatically
-void addBenchmarkSpecOptions(OptionParser &op)
+__global__ void BFS_kernel_warp(
+		hipLaunchParm lp,
+        unsigned int *levels,
+        unsigned int *edgeArray,
+        unsigned int *edgeArrayAux,
+        int W_SZ,
+        int CHUNK_SZ,
+        unsigned int numVertices,
+        int curr,
+        int *flag)
 {
-    op.addOption("graph_file", OPT_STRING, "random", "name of graph file");
-    op.addOption("degree", OPT_INT, "2", "average degree of nodes");
-    op.addOption("algo", OPT_INT, "1", "1-IIIT BFS 2-UIUC BFS ");
-    op.addOption("dump-pl", OPT_BOOL, "false",
-            "enable dump of path lengths to file");
-    op.addOption("source_vertex", OPT_INT, "0",
-            "vertex to start the traversal from");
-    op.addOption("global-barrier", OPT_BOOL, "false",
-            "enable the use of global barrier in UIUC BFS");
+    int tid = hipThreadIdx_x + hipBlockDim_x * hipBlockIdx_x;
+    int W_OFF = tid % W_SZ;
+    int W_ID = tid / W_SZ;
+    int NUM_WARPS = hipBlockDim_x * hipGridDim_x/W_SZ;
+    int v1= W_ID * CHUNK_SZ;
+    int chk_sz=CHUNK_SZ+1;
+
+    if((v1+CHUNK_SZ)>=numVertices)
+    {
+        chk_sz =  numVertices-v1+1;
+        if(chk_sz<0)
+            chk_sz=0;
+    }
+
+    for(int v=v1; v< chk_sz-1+v1; v++)
+    {
+        if(levels[v] == curr)
+        {
+            unsigned int num_nbr = edgeArray[v+1]-edgeArray[v];
+            unsigned int nbr_off = edgeArray[v];
+            for(int i=W_OFF; i<num_nbr; i+=W_SZ)
+            {
+               int v = edgeArrayAux[i + nbr_off];
+               if(levels[v]==UINT_MAX)
+               {
+                    levels[v] = curr + 1;
+                    *flag = 1;
+               }
+            }
+        }
+    }
 }
 
 
+//the global mutex for global barrier function
+volatile __device__ int g_mutex=0;
+//Store the last used value of g_mutex2
+volatile __device__ int g_mutex2=0;
+
+//S. Xiao and W. Feng, .Inter-block GPU communication
+//via fast barrier synchronization, Technical Report TR-09-19,
+//Dept. of Computer Science, Virginia Tech
 // ****************************************************************************
-// Function: verify_results
+// Function: __gpu_sync
 //
 // Purpose:
-//  Verify BFS results by comparing the output path lengths from cpu and gpu
-//  traversals
+//   Implements global barrier synchronization across thread blocks. Thread
+//   blocks must be limited to number of multiprocessors available
 //
 // Arguments:
-//   cpu_cost: path lengths calculated on cpu
-//   gpu_cost: path lengths calculated on gpu
-//   numVerts: number of vertices in the given graph
-//   out_path_lengths: specify if path lengths should be dumped to files
+//   blocks_to_synch: the number of blocks across which to implement the barrier
 //
 // Returns:  nothing
 //
@@ -65,51 +105,120 @@ void addBenchmarkSpecOptions(OptionParser &op)
 // Modifications:
 //
 // ****************************************************************************
-unsigned int verify_results(unsigned int *cpu_cost, unsigned int *gpu_cost,
-                            unsigned int numVerts,  bool out_path_lengths)
+__device__ void __gpu_sync(int blocks_to_synch)
 {
-    unsigned int unmatched_nodes=0;
-    for(int i=0;i<numVerts;i++)
-    {
-        if(gpu_cost[i]!=cpu_cost[i])
-        {
-            unmatched_nodes++;
-        }
-    }
+    __syncthreads();
+    //thread ID in a block
+    int tid_in_block= hipThreadIdx_x;
 
-    // If user wants to write path lengths to file
-    if(out_path_lengths)
-    {
-        std::ofstream bfs_out_cpu("bfs_out_cpu.txt");
-        std::ofstream bfs_out_gpu("bfs_out_cuda.txt");
-        for(int i=0;i<numVerts;i++)
-        {
-            if(cpu_cost[i]!=UINT_MAX)
-                bfs_out_cpu<<cpu_cost[i]<<"\n";
-            else
-                bfs_out_cpu<<"0\n";
 
-            if(gpu_cost[i]!=UINT_MAX)
-                bfs_out_gpu<<gpu_cost[i]<<"\n";
-            else
-                bfs_out_gpu<<"0\n";
-        }
-        bfs_out_cpu.close();
-        bfs_out_gpu.close();
+    // only thread 0 is used for synchronization
+    if (tid_in_block == 0)
+    {
+        atomicAdd((int *)&g_mutex, 1);
+        //only when all blocks add 1 to g_mutex will
+        //g_mutex equal to blocks_to_synch
+        while(g_mutex < blocks_to_synch);
     }
-    return unmatched_nodes;
+    __syncthreads();
+}
+
+//store the frontier length
+volatile __device__ int g_q_offsets[1]={0};
+//store the frontier length for the next iteration
+volatile __device__ int g_q_size[1]={0};
+
+
+// ****************************************************************************
+// Function: Reset_kernel_parameters
+//
+// Purpose:
+//   Reset global variables
+//
+// Arguments:
+//   frontier_length: length of the frontier array
+//
+// Returns:  nothing
+//
+// Programmer: Aditya Sarwade
+// Creation: June 16, 2011
+//
+// Modifications:
+//
+// ****************************************************************************
+__global__ void Reset_kernel_parameters(hipLaunchParm lp, unsigned int *frontier_length)
+{
+    g_mutex=0;
+    g_mutex2=0;
+    *frontier_length=0;
+    *g_q_offsets=0;
+    g_q_size[0]=0;
 }
 
 // ****************************************************************************
-// Function: RunTest1
+// Function: Frontier_copy
 //
 // Purpose:
-//   Runs the BFS benchmark using method 1 (IIIT-BFS method)
+//   Copy frontier2 data to frontier & reset global variables
 //
 // Arguments:
-//   resultDB: results from the benchmark are stored in this db
-//   op: the options parser / parameter database
-//   G: input graph
+//   frontier: array that stores the vertices to visit in the current level
+//   frontier2: used with frontier in even odd loops
+//   frontier_length: length of the new frontier array
+//
+// Returns:  nothing
+//
+// Programmer:
+// Creation:
+//
+// Modifications:
+//
+// ****************************************************************************
+__global__ void Frontier_copy(
+		hipLaunchParm lp,
+        unsigned int *frontier,
+        unsigned int *frontier2,
+        unsigned int *frontier_length)
+{
+    unsigned int tid=hipThreadIdx_x + hipBlockDim_x * hipBlockIdx_x;
+
+    if(tid<*frontier_length)
+    {
+        frontier[tid]=frontier2[tid];
+    }
+    if(tid==0)
+    {
+        g_mutex=0;
+        g_mutex2=0;
+        *g_q_offsets=0;
+        *g_q_size=0;
+    }
+}
+
+
+//An Effective GPU Implementation of Breadth-First Search, Lijuan Luo,
+//Martin Wong,Wen-mei Hwu ,
+//Department of Electrical and Computer Engineering,
+//University of Illinois at Urbana-Champaign
+
+// ****************************************************************************
+// Function: BFS_kernel_one_block
+//
+// Purpose:
+//   Perform BFS on the given graph when the frontier length is within one
+//   thread block (i.e max number of threads per block)
+//
+// Arguments:
+//   frontier: array that stores the vertices to visit in the current level
+//   frontier_len: length of the given frontier array
+//   cost: array that stores the cost to visit each vertex
+//   visited: mask that tells if a vertex is currently in frontier
+//   edgeArray: array that gives offset of a vertex in edgeArrayAux
+//   edgeArrayAux: array that gives the edge list of a vertex
+//   numVertices: number of vertices in the given graph
+//   numEdges: number of edges in the given graph
+//   frontier_length: length of the new frontier array
+//   max_local_mem: max size of the shared memory queue
 //
 // Returns:  nothing
 //
@@ -119,244 +228,317 @@ unsigned int verify_results(unsigned int *cpu_cost, unsigned int *gpu_cost,
 // Modifications:
 //
 // ****************************************************************************
-void RunTest1(ResultDatabase &resultDB, OptionParser &op, Graph *G)
+__global__ void BFS_kernel_one_block_spill(
+		hipLaunchParm lp,
+        volatile unsigned int *frontier,
+        unsigned int frontier_len,
+        volatile unsigned int *cost,
+        volatile int *visited,
+        unsigned int *edgeArray,
+        unsigned int *edgeArrayAux,
+        unsigned int numVertices,
+        unsigned int numEdges,
+        volatile unsigned int *frontier_length,
+        const unsigned int max_local_mem)
 {
-    typedef char frontier_type;
-    typedef unsigned int cost_type;
 
-    // Get graph info
-    unsigned int *edgeArray=G->GetEdgeOffsets();
-    unsigned int *edgeArrayAux=G->GetEdgeList();
-    unsigned int adj_list_length=G->GetAdjacencyListLength();
-    unsigned int numVerts = G->GetNumVertices();
-    unsigned int numEdges = G->GetNumEdges();
+    extern volatile __shared__ unsigned int s_mem[];
 
-    int *flag;
+    //block queues
+    unsigned int *b_q=(unsigned int *)&s_mem[0];
+    unsigned int *b_q2=(unsigned int *)&s_mem[max_local_mem];
 
-    // Allocate pinned memory for frontier and cost arrays on CPU
-    cost_type  *costArray;
-    CUDA_SAFE_CALL(cudaMallocHost((void **)&costArray,
-                                  sizeof(cost_type)*(numVerts)));
-    CUDA_SAFE_CALL(cudaMallocHost((void **)&flag,
-                                  sizeof(int)));
-
-    // Variables for GPU memory
-    // Adjacency lists
-    unsigned int *d_edgeArray=NULL,*d_edgeArrayAux=NULL;
-    // Cost array
-    cost_type  *d_costArray;
-    // Flag to check when traversal is complete
-    int *d_flag;
-
-    // Allocate memory on GPU
-    CUDA_SAFE_CALL(cudaMalloc(&d_costArray,sizeof(cost_type)*numVerts));
-    CUDA_SAFE_CALL(cudaMalloc(&d_edgeArray,sizeof(unsigned int)*(numVerts+1)));
-    CUDA_SAFE_CALL(cudaMalloc(&d_edgeArrayAux,
-                                        adj_list_length*sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc(&d_flag,sizeof(int)));
-
-    // Initialize frontier and cost arrays
-    for (int index=0;index<numVerts;index++)
+    volatile __shared__ unsigned int b_offset[1];
+    volatile __shared__ unsigned int b_q_length[1];
+    //get the threadId
+    unsigned int tid=hipThreadIdx_x;
+    //copy frontier queue from global queue to local block queue
+    if(tid<frontier_len)
     {
-        costArray[index]=UINT_MAX;
+        b_q[tid]=frontier[tid];
     }
 
-    // Set vertex to start traversal from
-    const unsigned int source_vertex=op.getOptionInt("source_vertex");
-    costArray[source_vertex]=0;
-
-    // Initialize timers
-    cudaEvent_t start_cuda_event, stop_cuda_event;
-    CUDA_SAFE_CALL(cudaEventCreate(&start_cuda_event));
-    CUDA_SAFE_CALL(cudaEventCreate(&stop_cuda_event));
-
-    // Transfer frontier, cost array and adjacency lists on GPU
-    cudaEventRecord(start_cuda_event, 0);
-    CUDA_SAFE_CALL(cudaMemcpy(d_costArray, costArray,
-                   sizeof(cost_type)*numVerts, cudaMemcpyHostToDevice));
-    CUDA_SAFE_CALL(cudaMemcpy(d_edgeArray, edgeArray,
-                   sizeof(unsigned int)*(numVerts+1),cudaMemcpyHostToDevice));
-    CUDA_SAFE_CALL(cudaMemcpy(d_edgeArrayAux,edgeArrayAux,
-                 sizeof(unsigned int)*adj_list_length,cudaMemcpyHostToDevice));
-    cudaEventRecord(stop_cuda_event,0);
-    cudaEventSynchronize(stop_cuda_event);
-    float inputTransferTime=0;
-    cudaEventElapsedTime(&inputTransferTime,start_cuda_event,stop_cuda_event);
-
-    // Get the device properties for kernel configuration
-    int device;
-    cudaGetDevice(&device);
-    cudaDeviceProp devProp;
-    cudaGetDeviceProperties(&devProp,device);
-
-    // Get the kernel configuration
-    int numBlocks=0;
-    numBlocks=(int)ceil((double)numVerts/(double)devProp.maxThreadsPerBlock);
-    if (numBlocks> devProp.maxGridSize[0])
+    unsigned int f_len=frontier_len;
+    while(1)
     {
-        std::cout<<"Max number of blocks exceeded";
-        return;
-    }
-
-    unsigned int *cpu_cost = new unsigned int[numVerts];
-    // Perform cpu bfs traversal for verifying results
-    G->GetVertexLengths(cpu_cost,source_vertex);
-
-    // Start the benchmark
-    int passes = op.getOptionInt("passes");
-    std::cout<<"Running Benchmark" << endl;
-    for (int j=0;j<passes;j++)
-    {
-        // Initialize kernel timer
-        double totalKernelTime=0;
-        float outputTransferTime=0;
-        float k_time=0;
-
-        // Flag set when there are nodes to be traversed in frontier
-        *flag=1;
-
-        // Start CPU Timer to measure total time taken to complete benchmark
-        int iters=0;
-        int W_SZ=32;
-        int CHUNK_SZ=32;
-        int cpu_bfs_timer = Timer::Start();
-        // While there are nodes to traverse
-        while (*flag)
+        //Initialize the block queue size to 0
+        if(tid==0)
         {
-            *flag=0;
-            // Set flag to 0
-            CUDA_SAFE_CALL(cudaMemcpy(d_flag,flag,
-                        sizeof(int),cudaMemcpyHostToDevice));
-
-            cudaEventRecord( start_cuda_event,0);
-            BFS_kernel_warp<<<numBlocks,devProp.maxThreadsPerBlock>>>
-            (d_costArray,d_edgeArray,d_edgeArrayAux, W_SZ, CHUNK_SZ, numVerts,
-                iters,d_flag);
-            CHECK_CUDA_ERROR();
-            cudaEventRecord(stop_cuda_event,0);
-            cudaEventSynchronize(stop_cuda_event);
-            k_time=0;
-            cudaEventElapsedTime( &k_time, start_cuda_event, stop_cuda_event );
-            totalKernelTime += k_time;
-
-            // Read flag
-            CUDA_SAFE_CALL(cudaMemcpy(flag,d_flag,
-                        sizeof(int),cudaMemcpyDeviceToHost));
-            iters++;
+            b_q_length[0]=0;
+            b_offset[0]=0;
         }
-        // Stop the CPU Timer
-        double result_time = Timer::Stop(cpu_bfs_timer, "cpu_bfs_timer");
-
-        // Copy the cost array from GPU to CPU
-        cudaEventRecord(start_cuda_event,0);
-        CUDA_SAFE_CALL(cudaMemcpy(costArray,d_costArray,
-                       sizeof(cost_type)*numVerts,cudaMemcpyDeviceToHost));
-        cudaEventRecord(stop_cuda_event,0);
-        cudaEventSynchronize(stop_cuda_event);
-        cudaEventElapsedTime(&k_time,start_cuda_event,
-                            stop_cuda_event);
-        outputTransferTime += k_time;
-
-        // Get the total transfer time
-        double totalTransferTime = inputTransferTime + outputTransferTime;
-
-        // Count number of vertices visited
-        unsigned int numVisited=0;
-        for (int i=0;i<numVerts;i++)
+        __syncthreads();
+        if(tid<f_len)
         {
-            if (costArray[i]!=UINT_MAX)
-                numVisited++;
+            //get the nodes to traverse from block queue
+            unsigned int node_to_process=*(volatile unsigned int *)&b_q[tid];
+            //remove from frontier
+            visited[node_to_process]=0;
+            //get the offsets of the vertex in the edge list
+            unsigned int offset = edgeArray[node_to_process];
+            unsigned int next   = edgeArray[node_to_process+1];
+
+            //Iterate through the neighbors of the vertex
+            while(offset<next)
+            {
+                //get neighbor
+                unsigned int nid=edgeArrayAux[offset];
+                //get its cost
+                unsigned int v=atomicMin((unsigned int *)&cost[nid],
+                        cost[node_to_process]+1);
+                //if cost is less than previously set add to frontier
+                if(v>cost[node_to_process]+1)
+                {
+                    int is_in_frontier=atomicExch((int *)&visited[nid],1);
+                    //if node already in frontier do nothing
+                    if(is_in_frontier==0)
+                    {
+                        //increment the warp queue size
+                        unsigned int t=
+                            atomicAdd((unsigned int *)&b_q_length[0],1);
+                        if(t< max_local_mem)
+                        {
+                            b_q2[t]=nid;
+                        }
+                        //write to global memory if shared memory full
+                        else
+                        {
+                            int off=atomicAdd((unsigned int *)&b_offset[0],
+                                    1);
+                            frontier[off]=nid;
+                        }
+                    }
+                }
+                offset++;
+            }
         }
+        __syncthreads();
 
-        bool dump_paths=op.getOptionBool("dump-pl");
-        // Verify Results against serial BFS
-        unsigned int unmatched_verts=verify_results(cpu_cost,costArray,numVerts,
-                                               dump_paths);
+        if(tid<max_local_mem)
+            b_q[tid]=*(volatile unsigned int *)&b_q2[tid];
 
-        // Total size transferred
-        float gbytes = sizeof(cost_type)*numVerts+             //cost array
-                       sizeof(unsigned int)*(numVerts+1)+      //edgeArray
-                       sizeof(unsigned int)*adj_list_length;   //edgeArrayAux
-        gbytes /= (1000. * 1000. * 1000.);
-
-        // Populate the result database
-        char atts[1024];
-        sprintf(atts,"v:%d_e:%d ", numVerts, adj_list_length);
-        if (unmatched_verts==0)
+        __syncthreads();
+        //Traversal complete exit
+        if(b_q_length[0]==0)
         {
-            totalKernelTime *= 1.e-3;
-            totalTransferTime *= 1.e-3;
-            resultDB.AddResult("BFS_total",atts,"s",result_time);
-            resultDB.AddResult("BFS_kernel_time",atts,"s",totalKernelTime);
-            resultDB.AddResult("BFS",atts,"GB/s",gbytes/totalKernelTime);
-            resultDB.AddResult("BFS_PCIe",atts,"GB/s",
-                                gbytes/(totalKernelTime+totalTransferTime));
-            resultDB.AddResult("BFS_Parity", atts, "N",
-                                totalTransferTime/totalKernelTime);
-            resultDB.AddResult("BFS_teps",atts,"Edges/s",
-                               numEdges/result_time);
-            resultDB.AddResult("BFS_visited_vertices", atts, "N",numVisited);
-        }
-        else
-        {
-            resultDB.AddResult("BFS_total",atts,"s",FLT_MAX);
-            resultDB.AddResult("BFS_kernel_time",atts,"s",FLT_MAX);
-            resultDB.AddResult("BFS",atts,"GB/s",FLT_MAX);
-            resultDB.AddResult("BFS_PCIe",atts,"GB/s",FLT_MAX);
-            resultDB.AddResult("BFS_Parity",atts,"N",FLT_MAX);
-            resultDB.AddResult("BFS_teps",atts,"Edges/s",FLT_MAX);
-            resultDB.AddResult("BFS_visited_vertices",atts,"N",FLT_MAX);
-        }
-
-        std::cout << "Verification of GPU results: ";
-        if (unmatched_verts==0)
-        {
-            std::cout << "Passed";
-        }
-        else
-        {
-            std::cout << "Failed\n";
+            if(tid==0)
+                frontier_length[0]=0;
             return;
         }
-        std::cout << endl;
+        // If frontier exceeds one block in size copy warp queues to
+        //global frontier queue and exit
+        else if( b_q_length[0] > hipBlockDim_x || b_q_length[0] > max_local_mem)
+        {
+            if(tid<(b_q_length[0]-b_offset[0]))
+                frontier[b_offset[0]+tid]= *(volatile unsigned int *)&b_q[tid];
+            if(tid==0)
+            {
+                frontier_length[0] = b_q_length[0];
+            }
+            return;
+        }
+        f_len=b_q_length[0];
+        __syncthreads();
+    }
+}
 
-        if (j==passes-1) //if passes completed break;
+// ****************************************************************************
+// Function: BFS_kernel_SM_block
+//
+// Purpose:
+//   Perform BFS on the given graph when the frontier length is greater than
+//   one thread block but less than number of Streaming Multiprocessor(SM)
+//   thread blocks (i.e max threads per block * SM blocks)
+//
+// Arguments:
+//   frontier: array that stores the vertices to visit in the current level
+//   frontier2: array that stores the vertices to visit in the next level
+//   frontier_len: length of the given frontier array
+//   cost: array that stores the cost to visit each vertex
+//   visited: mask that tells if a vertex is currently in frontier
+//   edgeArray: array that gives offset of a vertex in edgeArrayAux
+//   edgeArrayAux: array that gives the edge list of a vertex
+//   numVertices: number of vertices in the given graph
+//   numEdges: number of edges in the given graph
+//   frontier_length: length of the new frontier array
+//   max_local_mem: max size of the shared memory queue
+//
+// Returns:  nothing
+//
+// Programmer: Aditya Sarwade
+// Creation: June 16, 2011
+//
+// Modifications:
+//
+// ****************************************************************************
+__global__ void BFS_kernel_SM_block_spill(
+		hipLaunchParm lp,
+        volatile unsigned int *frontier,
+        volatile unsigned int *frontier2,
+        unsigned int frontier_len,
+        volatile unsigned int *cost,
+        volatile int *visited,
+        unsigned int *edgeArray,
+        unsigned int *edgeArrayAux,
+        unsigned int numVertices,
+        unsigned int numEdges,
+        volatile unsigned int *frontier_length,
+        const unsigned int max_local_mem)
+{
+    extern volatile __shared__ unsigned int b_q[];
+
+    volatile __shared__ unsigned int b_q_length[1];
+    volatile __shared__ unsigned int b_offset[1];
+
+    //get the threadId
+    unsigned int tid=hipThreadIdx_x + hipBlockDim_x * hipBlockIdx_x;
+    unsigned int lid=hipThreadIdx_x;
+
+    int loop_index=0;
+    unsigned int l_mutex=g_mutex2;
+    unsigned int f_len=frontier_len;
+    while(1)
+    {
+        //initialize the block queue length and warp queue offset
+        if (lid==0)
+        {
+            b_q_length[0]=0;
+            b_offset[0]=0;
+        }
+        __syncthreads();
+        //Initialize the warp queue sizes to 0
+        if(tid<f_len)
+        {
+            //get the nodes to traverse from block queue
+            unsigned int node_to_process;
+
+            if(loop_index==0)
+               node_to_process=frontier[tid];
+            else
+               node_to_process=frontier2[tid];
+
+            //remove from frontier
+            visited[node_to_process]=0;
+            //get the offsets of the vertex in the edge list
+            unsigned int offset=edgeArray[node_to_process];
+            unsigned int next=edgeArray[node_to_process+1];
+
+            //Iterate through the neighbors of the vertex
+            while(offset<next)
+            {
+                //get neighbor
+                unsigned int nid=edgeArrayAux[offset];
+                //get its cost
+                unsigned int v=atomicMin((unsigned int *)&cost[nid],
+                        cost[node_to_process]+1);
+                //if cost is less than previously set add to frontier
+                if(v>cost[node_to_process]+1)
+                {
+                    int is_in_frontier=atomicExch((int *)&visited[nid],1);
+                    //if node already in frontier do nothing
+                    if(is_in_frontier==0)
+                    {
+                        //increment the warp queue size
+                        unsigned int t=atomicAdd((unsigned int *)&b_q_length[0],
+                                1);
+                        if(t<max_local_mem)
+                        {
+                            b_q[t]=nid;
+                        }
+                        //write to global memory if shared memory full
+                        else
+                        {
+                            int off=atomicAdd((unsigned int *)g_q_offsets,1);
+                            if(loop_index==0)
+                                frontier2[off]=nid;
+                            else
+                                frontier[off]=nid;
+                        }
+                    }
+                }
+                offset++;
+            }
+        }
+        //get offset of block queue in global queue
+        __syncthreads();
+        if(lid==0)
+        {
+            if(b_q_length[0] > max_local_mem)
+            {
+                b_q_length[0] = max_local_mem;
+            }
+            b_offset[0]=atomicAdd((unsigned int *)g_q_offsets,b_q_length[0]);
+        }
+        __syncthreads();
+
+        l_mutex+=hipGridDim_x;
+        __gpu_sync(l_mutex);
+
+        //store frontier size
+        if(tid==0)
+        {
+            g_q_size[0]=g_q_offsets[0];
+            g_q_offsets[0]=0;
+        }
+
+        //copy block queue to global queue
+        if(lid < b_q_length[0])
+        {
+            if(loop_index==0)
+                frontier2[lid+b_offset[0]]=b_q[lid];
+            else
+                frontier[lid+b_offset[0]]=b_q[lid];
+        }
+
+        l_mutex+=hipGridDim_x;
+        __gpu_sync(l_mutex);
+
+        //if frontier exceeds SM blocks or less than 1 block exit
+        if(g_q_size[0] < hipBlockDim_x ||
+                g_q_size[0] > hipBlockDim_x * hipGridDim_x)
+        {
+
+            //TODO:Call the 1-block bfs right here
             break;
-
-        // Reset the arrays to perform BFS again
-        for (int index=0;index<numVerts;index++)
-        {
-            costArray[index]=UINT_MAX;
         }
-        costArray[source_vertex]=0;
-
-        CUDA_SAFE_CALL(cudaMemcpy(d_costArray, costArray,
-                       sizeof(cost_type)*numVerts, cudaMemcpyHostToDevice));
-
+        loop_index=(loop_index+1)%2;
+        //store the current frontier size
+        f_len=g_q_size[0];
     }
 
-    // Clean up
-    delete[] cpu_cost;
-    CUDA_SAFE_CALL(cudaEventDestroy(start_cuda_event));
-    CUDA_SAFE_CALL(cudaEventDestroy(stop_cuda_event));
+    if(loop_index==0)
+    {
+        for(int i=tid;i<g_q_size[0];i += hipBlockDim_x*hipGridDim_x)
+               frontier[i]=frontier2[i];
+    }
 
-    CUDA_SAFE_CALL(cudaFreeHost(costArray));
-
-    CUDA_SAFE_CALL(cudaFree(d_costArray));
-    CUDA_SAFE_CALL(cudaFree(d_edgeArray));
-    CUDA_SAFE_CALL(cudaFree(d_edgeArrayAux));
+    if(tid==0)
+    {
+        frontier_length[0]=g_q_size[0];
+    }
 }
 
+
 // ****************************************************************************
-// Function: RunTest2
+// Function: BFS_kernel_multi_block
 //
 // Purpose:
-//   Runs the BFS benchmark using method 2 (UIUC-BFS method)
+//   Perform BFS on the given graph when the frontier length is greater than
+//   than number of Streaming Multiprocessor(SM) thread blocks
+//   (i.e max threads per block * SM blocks)
 //
 // Arguments:
-//   resultDB: results from the benchmark are stored in this db
-//   op: the options parser / parameter database
-//   G: input graph
+//   frontier: array that stores the vertices to visit in the current level
+//   frontier2: array that stores the vertices to visit in the next level
+//   frontier_len: length of the given frontier array
+//   cost: array that stores the cost to visit each vertex
+//   visited: mask that tells if a vertex has been visited
+//   edgeArray: array that gives offset of a vertex in edgeArrayAux
+//   edgeArrayAux: array that gives the edge list of a vertex
+//   numVertices: number of vertices in the given graph
+//   numEdges: number of edges in the given graph
+//   frontier_length: length of the new frontier array
+//   max_local_mem: max size of the shared memory queue
 //
 // Returns:  nothing
 //
@@ -366,448 +548,211 @@ void RunTest1(ResultDatabase &resultDB, OptionParser &op, Graph *G)
 // Modifications:
 //
 // ****************************************************************************
-void RunTest2(ResultDatabase &resultDB, OptionParser &op, Graph *G)
+__global__ void BFS_kernel_multi_block_spill(
+		hipLaunchParm lp,
+        volatile unsigned int *frontier,
+        volatile unsigned int *frontier2,
+        unsigned int frontier_len,
+        volatile unsigned int *cost,
+        volatile int *visited,
+        unsigned int *edgeArray,
+        unsigned int *edgeArrayAux,
+        unsigned int numVertices,
+        unsigned int numEdges,
+        volatile unsigned int *frontier_length,
+        const unsigned int max_local_mem)
 {
 
-    typedef unsigned int frontier_type;
-    typedef unsigned int cost_type;
-    typedef int visited_type;
+    extern volatile __shared__ unsigned int b_q[];
 
-    // Get graph info
-    unsigned int *edgeArray=G->GetEdgeOffsets();
-    unsigned int *edgeArrayAux=G->GetEdgeList();
-    unsigned int adj_list_length=G->GetAdjacencyListLength();
-    unsigned int numVerts = G->GetNumVertices();
-    unsigned int numEdges = G->GetNumEdges();
+    volatile __shared__ unsigned int b_q_length[1];
+    volatile __shared__ unsigned int b_offset[1];
+    //get the threadId
+    unsigned int tid=hipThreadIdx_x + hipBlockDim_x * hipBlockIdx_x;
+    unsigned int lid=hipThreadIdx_x;
 
-    // Allocate memory for frontier & visited arrays on CPU
-    frontier_type *frontier;
-    cost_type  *costArray;
-    visited_type *visited;
-
-    CUDA_SAFE_CALL(cudaMallocHost((void **)&frontier,
-                    sizeof(frontier_type)*(numVerts)));
-    CUDA_SAFE_CALL(cudaMallocHost((void **)&costArray ,
-                    sizeof(cost_type)*(numVerts)));
-    CUDA_SAFE_CALL(cudaMallocHost((void **)&visited,
-                    sizeof(visited_type)*(numVerts)));
-
-    // Variables for GPU memory
-    // Frontier & visited array, and frontier_length on GPU
-    frontier_type *d_frontier, *d_frontier2;
-    visited_type *d_visited;
-    // Adjacency lists
-    unsigned int *d_edgeArray=NULL,*d_edgeArrayAux=NULL;
-    // Cost array
-    cost_type  *d_costArray;
-    // Frontier length
-    unsigned int *d_frontier_length;
-
-    // Allocate memory on GPU
-    CUDA_SAFE_CALL(cudaMalloc(&d_frontier,sizeof(frontier_type)*numVerts));
-    CUDA_SAFE_CALL(cudaMalloc(&d_frontier2,sizeof(frontier_type)*numVerts));
-    CUDA_SAFE_CALL(cudaMalloc(&d_costArray,sizeof(cost_type)*numVerts));
-    CUDA_SAFE_CALL(cudaMalloc(&d_visited,sizeof(visited_type)*numVerts));
-    CUDA_SAFE_CALL(cudaMalloc(&d_edgeArray,sizeof(unsigned int)*(numVerts+1)));
-    CUDA_SAFE_CALL(cudaMalloc(&d_edgeArrayAux,
-                                        adj_list_length*sizeof(unsigned int)));
-    CUDA_SAFE_CALL(cudaMalloc(&d_frontier_length,sizeof(unsigned int)));
-
-    // Initialize frontier and visited arrays
-    for (int index=0;index<numVerts;index++)
+    //initialize the block queue length and warp queue offset
+    if (lid == 0 )
     {
-        frontier[index]=0;
-        costArray[index]=UINT_MAX;
-        visited[index]=0;
+        b_q_length[0]=0;
+        b_offset[0]=0;
     }
 
-    // Get vertex to start traversal from
-    const unsigned int source_vertex=op.getOptionInt("source_vertex");
-    unsigned int frontier_length;
-
-    // Set initial condition for traversal
-    frontier_length=1;
-    frontier[0]=source_vertex;
-    visited[source_vertex]=1;
-    costArray[source_vertex]=0;
-
-    // Initialize timers
-    cudaEvent_t start_cuda_event, stop_cuda_event;
-    CUDA_SAFE_CALL(cudaEventCreate(&start_cuda_event));
-    CUDA_SAFE_CALL(cudaEventCreate(&stop_cuda_event));
-
-    // Transfer frontier, visited, cost array and adjacency lists on GPU
-    cudaEventRecord(start_cuda_event, 0);
-    CUDA_SAFE_CALL(cudaMemcpy(d_frontier, frontier,
-                   sizeof(frontier_type)*numVerts , cudaMemcpyHostToDevice));
-    CUDA_SAFE_CALL(cudaMemcpy(d_costArray, costArray,
-                   sizeof(cost_type)*numVerts, cudaMemcpyHostToDevice));
-    CUDA_SAFE_CALL(cudaMemcpy(d_visited, visited,
-                   sizeof(visited_type)*numVerts, cudaMemcpyHostToDevice));
-    CUDA_SAFE_CALL(cudaMemcpy(d_edgeArray, edgeArray,
-                   sizeof(unsigned int)*(numVerts+1),cudaMemcpyHostToDevice));
-    CUDA_SAFE_CALL(cudaMemcpy(d_edgeArrayAux,edgeArrayAux,
-                  sizeof(unsigned int)*adj_list_length,cudaMemcpyHostToDevice));
-    CUDA_SAFE_CALL(cudaMemcpy(d_frontier_length, &costArray[source_vertex],
-                   sizeof(unsigned int), cudaMemcpyHostToDevice));
-    cudaEventRecord(stop_cuda_event,0);
-    cudaEventSynchronize(stop_cuda_event);
-    float inputTransferTime=0;
-    cudaEventElapsedTime(&inputTransferTime,start_cuda_event,stop_cuda_event);
-
-    // Get the device properties for kernel configuration
-    int device;
-    cudaGetDevice(&device);
-    cudaDeviceProp devProp;
-    cudaGetDeviceProperties(&devProp,device);
-
-    // Get the kernel configuration
-    int numBlocks=0;
-    numBlocks=(int)ceil((double)numVerts/(double)devProp.maxThreadsPerBlock);
-    if(numBlocks> devProp.maxGridSize[0])
+    __syncthreads();
+    //Initialize the warp queue sizes to 0
+    if(tid<frontier_len)
     {
-        std::cout<<"Max number of blocks exceeded";
-        return;
-    }
+        //get the nodes to traverse from block queue
+        unsigned int node_to_process=frontier[tid];
+        visited[node_to_process]=0;
+        //get the offsets of the vertex in the edge list
+        unsigned int offset=edgeArray[node_to_process];
+        unsigned int next=edgeArray[node_to_process+1];
 
-    // Get the usable shared memory
-    unsigned int max_q_size=((devProp.sharedMemPerBlock-
-                            (sizeof(unsigned int)*3))/sizeof(unsigned int));
-
-    unsigned int q_size2 = max_q_size;
-
-    if (q_size2 > devProp.maxThreadsPerBlock)
-    {
-        q_size2 = devProp.maxThreadsPerBlock;
-    }
-
-    unsigned int shared_mem2 = q_size2 * sizeof(unsigned int);
-    unsigned int q_size1=max_q_size / 2;
-
-    if(q_size1 > devProp.maxThreadsPerBlock)
-    {
-        q_size1 = devProp.maxThreadsPerBlock;
-    }
-
-    unsigned int shared_mem1 = q_size1 * sizeof(unsigned int) * 2;
-
-    // Perform cpu bfs traversal to compare
-    unsigned int *cpu_cost = new unsigned int[numVerts];
-    G->GetVertexLengths(cpu_cost,source_vertex);
-
-    bool g_barrier=op.getOptionBool("global-barrier");
-
-    // Start the benchmark
-    int passes = op.getOptionInt("passes");
-    std::cout<<"Running Benchmark" << endl;
-    for (int j=0;j<passes;j++)
-    {
-        //Initialize kernel timer
-        double totalKernelTime=0;
-
-        //Start CPU Timer to measure total time taken to complete benchmark
-        int cpu_bfs_timer = Timer::Start();
-
-        cudaEventRecord( start_cuda_event,0);
-        //While there are nodes to traverse
-        while(frontier_length>0)
+        //Iterate through the neighbors of the vertex
+        while(offset<next)
         {
-            //Call Reset_kernel function
-            Reset_kernel_parameters<<<1,1>>>(d_frontier_length);
-            CHECK_CUDA_ERROR();
-
-            //kernel for frontier length within one block
-            if(frontier_length<devProp.maxThreadsPerBlock)
+            //get neighbor
+            unsigned int nid=edgeArrayAux[offset];
+            //get its cost
+            unsigned int v=atomicMin((unsigned int *)&cost[nid],
+                    cost[node_to_process]+1);
+            //if cost is less than previously set add to frontier
+            if(v>cost[node_to_process]+1)
             {
-                BFS_kernel_one_block_spill<<<1, devProp.maxThreadsPerBlock,
-                    shared_mem1>>>
-                (d_frontier,frontier_length,d_costArray,d_visited,
-                 d_edgeArray,d_edgeArrayAux,numVerts,numEdges,
-                 d_frontier_length,q_size1);
-                CHECK_CUDA_ERROR();
+                int is_in_frontier=atomicExch((int *)&visited[nid],1);
+                //if node already in frontier do nothing
+                if(is_in_frontier==0)
+                {
+                    //increment the warp queue size
+                    unsigned int t=atomicAdd((unsigned int *)&b_q_length[0],
+                            1);
+                    if(t<max_local_mem)
+                    {
+                        b_q[t]=nid;
+                    }
+                    //write to global memory if shared memory full
+                    else
+                    {
+                        int off=atomicAdd((unsigned int *)frontier_length,
+                                1);
+                        frontier2[off]=nid;
+                    }
+                }
             }
-            //kernel for frontier length within SM blocks
-            else if(g_barrier && frontier_length <
-                    devProp.maxThreadsPerBlock*devProp.multiProcessorCount)
-            {
-                BFS_kernel_SM_block_spill
-                <<<devProp.multiProcessorCount, devProp.maxThreadsPerBlock,
-                    shared_mem2>>>
-                (d_frontier,d_frontier2,frontier_length,d_costArray,
-                 d_visited,d_edgeArray,d_edgeArrayAux,numVerts,
-                 numEdges,d_frontier_length,q_size2);
-                CHECK_CUDA_ERROR();
-            }
-            //kernel for frontier length greater than SM blocks
-            else
-            {
-                BFS_kernel_multi_block_spill
-                <<<numBlocks, devProp.maxThreadsPerBlock,shared_mem2>>>
-                (d_frontier,d_frontier2,frontier_length,d_costArray,
-                 d_visited,d_edgeArray,d_edgeArrayAux,numVerts,
-                 numEdges,d_frontier_length,q_size2);
-                CHECK_CUDA_ERROR();
-
-                Frontier_copy<<<numBlocks, devProp.maxThreadsPerBlock>>>(
-                    d_frontier,d_frontier2,d_frontier_length);
-                CHECK_CUDA_ERROR();
-            }
-            //Get the current frontier length
-            CUDA_SAFE_CALL(cudaMemcpy(&frontier_length,d_frontier_length,
-                                sizeof(unsigned int),cudaMemcpyDeviceToHost));
+            offset++;
         }
-        cudaEventRecord(stop_cuda_event,0);
-        cudaEventSynchronize(stop_cuda_event);
-        float k_time=0;
-        cudaEventElapsedTime( &k_time, start_cuda_event, stop_cuda_event );
-        totalKernelTime += k_time;
-
-        //Stop the CPU Timer
-        double result_time = Timer::Stop(cpu_bfs_timer, "cpu_bfs_timer");
-
-        //Copy the cost array from GPU to CPU
-        cudaEventRecord(start_cuda_event,0);
-        CUDA_SAFE_CALL(cudaMemcpy(costArray,d_costArray,
-                       sizeof(cost_type)*numVerts,cudaMemcpyDeviceToHost));
-        cudaEventRecord(stop_cuda_event,0);
-        cudaEventSynchronize(stop_cuda_event);
-        float outputTransferTime=0;
-        cudaEventElapsedTime(&outputTransferTime,start_cuda_event,
-                            stop_cuda_event);
-
-        //get the total transfer time
-        double totalTransferTime = inputTransferTime + outputTransferTime;
-
-        //count number of vertices visited
-        unsigned int numVisited=0;
-        for(int i=0;i<numVerts;i++)
-        {
-            if(costArray[i]!=UINT_MAX)
-                numVisited++;
-        }
-
-        bool dump_paths=op.getOptionBool("dump-pl");
-        //Verify Results against serial BFS
-        unsigned int unmatched_verts=verify_results(cpu_cost,costArray,numVerts,
-                                               dump_paths);
-
-        float gbytes=   sizeof(frontier_type)*numVerts*2+       //2 frontiers
-                        sizeof(cost_type)*numVerts+             //cost array
-                        sizeof(visited_type)*numVerts+          //visited array
-                        sizeof(unsigned int)*(numVerts+1)+      //edgeArray
-                        sizeof(unsigned int)*adj_list_length;   //edgeArrayAux
-
-        gbytes/=(1000. * 1000. * 1000.);
-
-        //populate the result database
-        char atts[1024];
-        sprintf(atts,"v:%d_e:%d ",numVerts,adj_list_length);
-        if(unmatched_verts==0)
-        {
-            totalKernelTime *= 1.e-3;
-            totalTransferTime *= 1.e-3;
-            resultDB.AddResult("BFS_total",atts,"s",result_time);
-            resultDB.AddResult("BFS_kernel_time",atts,"s",totalKernelTime);
-            resultDB.AddResult("BFS",atts,"GB/s",gbytes/totalKernelTime);
-            resultDB.AddResult("BFS_PCIe",atts,"GB/s",
-                                gbytes/(totalKernelTime+totalTransferTime));
-            resultDB.AddResult("BFS_Parity", atts, "N",
-                                totalTransferTime/totalKernelTime);
-            resultDB.AddResult("BFS_teps",atts,"Edges/s",
-                               numEdges/result_time);
-            resultDB.AddResult("BFS_visited_vertices", atts, "N",numVisited);
-        }
-        else
-        {
-            resultDB.AddResult("BFS_total",atts,"s",FLT_MAX);
-            resultDB.AddResult("BFS_kernel_time",atts,"s",FLT_MAX);
-            resultDB.AddResult("BFS",atts,"GB/s",FLT_MAX);
-            resultDB.AddResult("BFS_PCIe",atts,"GB/s",FLT_MAX);
-            resultDB.AddResult("BFS_Parity",atts,"N",FLT_MAX);
-            resultDB.AddResult("BFS_teps",atts,"Edges/s",FLT_MAX);
-            resultDB.AddResult("BFS_visited_vertices",atts,"N",FLT_MAX);
-        }
-
-
-        std::cout << endl << "Verification of GPU results: ";
-        if(unmatched_verts==0)
-        {
-            std::cout<<"Passed";
-        }
-        else
-        {
-            std::cout<<"Failed\n";
-            return;
-        }
-        cout << endl;
-        //if passes completed break;
-        if(j==passes-1)
-            break;
-
-        //reset the arrays to perform BFS again
-        for(int index=0;index<numVerts;index++)
-        {
-            frontier[index]=0;
-            costArray[index]=UINT_MAX;
-            visited[index]=0;
-        }
-        //reset the initial condition
-        frontier_length=1;
-        frontier[0]=source_vertex;
-        visited[source_vertex]=1;
-        costArray[source_vertex]=0;
-
-        //transfer the arrays to gpu
-        CUDA_SAFE_CALL(cudaMemcpy(d_frontier, frontier,
-                       sizeof(frontier_type)*numVerts, cudaMemcpyHostToDevice));
-        CUDA_SAFE_CALL(cudaMemcpy(d_costArray, costArray,
-                       sizeof(cost_type)*numVerts, cudaMemcpyHostToDevice));
-        CUDA_SAFE_CALL(cudaMemcpy(d_visited, visited,
-                       sizeof(visited_type)*numVerts, cudaMemcpyHostToDevice));
     }
 
-    //Clean up
-    delete[] cpu_cost;
+    __syncthreads();
 
-    CUDA_SAFE_CALL(cudaEventDestroy(start_cuda_event));
-    CUDA_SAFE_CALL(cudaEventDestroy(stop_cuda_event));
-    CUDA_SAFE_CALL(cudaFreeHost(frontier));
-    CUDA_SAFE_CALL(cudaFreeHost(costArray));
-    CUDA_SAFE_CALL(cudaFreeHost(visited));
+    //get block queue offset in global queue
+    if(lid==0)
+    {
+        if(b_q_length[0] > max_local_mem)
+        {
+            b_q_length[0]=max_local_mem;
+        }
+        b_offset[0]=atomicAdd((unsigned int *)frontier_length,b_q_length[0]);
+    }
+    __syncthreads();
 
-    CUDA_SAFE_CALL(cudaFree(d_frontier));
-    CUDA_SAFE_CALL(cudaFree(d_frontier2));
-    CUDA_SAFE_CALL(cudaFree(d_visited));
-    CUDA_SAFE_CALL(cudaFree(d_costArray));
-    CUDA_SAFE_CALL(cudaFree(d_frontier_length));
-    CUDA_SAFE_CALL(cudaFree(d_edgeArray));
-    CUDA_SAFE_CALL(cudaFree(d_edgeArrayAux));
+    //copy block queue to frontier
+    if(lid < b_q_length[0])
+        frontier2[lid+b_offset[0]]=b_q[lid];
 }
+#else
+// No atomics are available, compile with stubs.
+__global__ void BFS_kernel_warp(
+		hipLaunchParm lp,
+        unsigned int *levels,
+        unsigned int *edgeArray,
+        unsigned int *edgeArrayAux,
+        int W_SZ,
+        int CHUNK_SZ,
+        unsigned int numVertices,
+        int curr,
+        int *flag) { ; }
+
+volatile __device__ int g_mutex=0;
+volatile __device__ int g_mutex2=0;
+//store the frontier length
+volatile __device__ int g_q_offsets[1]={0};
+//store the frontier length for the next iteration
+volatile __device__ int g_q_size[1]={0};
+
+__global__ void BFS_kernel_one_block(
+	hipLaunchParm lp,
+	volatile unsigned int *frontier,
+	unsigned int frontier_len,
+	volatile unsigned int *cost,
+	volatile int *visited,
+	unsigned int *edgeArray,
+	unsigned int *edgeArrayAux,
+	unsigned int numVertices,
+	unsigned int numEdges,
+	volatile unsigned int *frontier_length,
+    unsigned int num_p_per_mp,
+    unsigned int w_q_size) { ; }
+
+__global__ void BFS_kernel_SM_block(
+	hipLaunchParm lp,
+	volatile unsigned int *frontier,
+	volatile unsigned int *frontier2,
+	unsigned int frontier_len,
+	volatile unsigned int *cost,
+	volatile int *visited,
+	unsigned int *edgeArray,
+	unsigned int *edgeArrayAux,
+	unsigned int numVertices,
+	unsigned int numEdges,
+	volatile unsigned int *frontier_length,
+    unsigned int num_p_per_mp,
+    unsigned int w_q_size) { ; }
 
 
+__global__ void BFS_kernel_multi_block(
+		hipLaunchParm lp,
+        volatile unsigned int *frontier,
+        volatile unsigned int *frontier2,
+        unsigned int frontier_len,
+        volatile unsigned int *cost,
+        volatile int *visited,
+        unsigned int *edgeArray,
+        unsigned int *edgeArrayAux,
+        unsigned int numVertices,
+        unsigned int numEdges,
+        volatile unsigned int *frontier_length,
+        unsigned int NUM_P_PER_MP,
+        unsigned int W_Q_SIZE) { ; }
 
-// ****************************************************************************
-// Function: RunBenchmark
-//
-// Purpose:
-//   Executes the BFS benchmark
-//
-// Arguments:
-//   resultDB: results from the benchmark are stored in this db
-//   op: the options parser / parameter database
-//
-// Returns:  nothing
-// Programmer: Aditya Sarwade
-// Creation: June 16, 2011
-//
-// Modifications:
-//
-// ****************************************************************************
-void RunBenchmark(ResultDatabase &resultDB, OptionParser &op)
-{
+__global__ void Reset_kernel_parameters(hipLaunchParm lp, unsigned int *frontier_length) { ; }
 
-    // First, check if the device supports atomics, which are required
-    // for this benchmark.  If not, return the "NoResult" sentinel.int device;
-    int device;
-    cudaGetDevice(&device);
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, device);
-    if ((deviceProp.major == 1 && deviceProp.minor < 2))
-    {
-        cerr << "Warning: BFS uses atomics and requires GPUs with CC > 1.2.\n";
-        char atts[32] = "Atomics_Unavailable";
-        resultDB.AddResult("BFS_total",atts,"s",FLT_MAX);
-        resultDB.AddResult("BFS_kernel_time",atts,"s",FLT_MAX);
-        resultDB.AddResult("BFS",atts,"GB/s",FLT_MAX);
-        resultDB.AddResult("BFS_PCIe",atts,"GB/s",FLT_MAX);
-        resultDB.AddResult("BFS_Parity", atts, "N",FLT_MAX);
-        resultDB.AddResult("BFS_teps",atts,"Edges/s",FLT_MAX);
-        resultDB.AddResult("BFS_visited_vertices",atts,"N",FLT_MAX);
-    }
+__global__ void Frontier_copy(
+	hipLaunchParm lp,
+	unsigned int *frontier,
+	unsigned int *frontier2,
+	unsigned int *frontier_length) { ; }
 
-    //adjacency list variables
-    //number of vertices and edges in graph
-    unsigned int numVerts,numEdges;
-    //Get the graph filename
-    string inFileName = op.getOptionString("graph_file");
-    //max degree in graph
-    Graph *G=new Graph();
+__global__ void BFS_kernel_one_block_spill(
+	hipLaunchParm lp,
+    volatile unsigned int *frontier,
+    unsigned int frontier_len,
+    volatile unsigned int *cost,
+    volatile int *visited,
+    unsigned int *edgeArray,
+    unsigned int *edgeArrayAux,
+    unsigned int numVertices,
+    unsigned int numEdges,
+    volatile unsigned int *frontier_length,
+    const unsigned int max_mem) { ; }
 
-    unsigned int **edge_ptr1 = G->GetEdgeOffsetsPtr();
-    unsigned int **edge_ptr2 = G->GetEdgeListPtr();
-    //Load simple k-way tree or from a file
-    if (inFileName == "random")
-    {
-        //Load simple k-way tree
-        unsigned int prob_sizes[4] = {1000,10000,100000,1000000};
-        numVerts = prob_sizes[op.getOptionInt("size")-1];
-        int avg_degree = op.getOptionInt("degree");
-        if(avg_degree<1)
-            avg_degree=1;
+__global__ void BFS_kernel_SM_block_spill(
+	hipLaunchParm lp,
+    volatile unsigned int *frontier,
+    volatile unsigned int *frontier2,
+    unsigned int frontier_len,
+    volatile unsigned int *cost,
+    volatile int *visited,
+    unsigned int *edgeArray,
+    unsigned int *edgeArrayAux,
+    unsigned int numVertices,
+    unsigned int numEdges,
+    volatile unsigned int *frontier_length,
+    const unsigned int max_mem) { ; }
 
-        //allocate memory for adjacency lists
-        //edgeArray =new unsigned int[numVerts+1];
-        //edgeArrayAux=new unsigned int[numVerts*(avg_degree+1)];
+__global__ void BFS_kernel_multi_block_spill(
+	hipLaunchParm lp,
+    volatile unsigned int *frontier,
+    volatile unsigned int *frontier2,
+    unsigned int frontier_len,
+    volatile unsigned int *cost,
+    volatile int *visited,
+    unsigned int *edgeArray,
+    unsigned int *edgeArrayAux,
+    unsigned int numVertices,
+    unsigned int numEdges,
+    volatile unsigned int *frontier_length,
+    const unsigned int max_mem) { ; }
+#endif
 
-        CUDA_SAFE_CALL(cudaMallocHost(edge_ptr1,
-                        sizeof(unsigned int)*(numVerts+1)));
-        CUDA_SAFE_CALL(cudaMallocHost(edge_ptr2,
-                        sizeof(unsigned int)*(numVerts*(avg_degree+1))));
-
-        //Generate simple tree
-        G->GenerateSimpleKWayGraph(numVerts,avg_degree);
-    }
-    else
-    {
-        //open the graph file
-        FILE *fp=fopen(inFileName.c_str(),"r");
-        if(fp==NULL)
-        {
-            std::cerr <<"Error: Graph Input File Not Found." << endl;
-            return;
-        }
-
-        //get the number of vertices and edges from the first line
-        const char delimiters[]=" \n";
-        char charBuf[MAX_LINE_LENGTH];
-        fgets(charBuf,MAX_LINE_LENGTH,fp);
-        char *temp_token = strtok (charBuf, delimiters);
-        while(temp_token[0]=='%')
-        {
-            fgets(charBuf,MAX_LINE_LENGTH,fp);
-            temp_token = strtok (charBuf, delimiters);
-        }
-        numVerts=atoi(temp_token);
-        temp_token = strtok (NULL, delimiters);
-        numEdges=atoi(temp_token);
-
-        //allocate pinned memory
-        CUDA_SAFE_CALL(cudaMallocHost(edge_ptr1,
-                        sizeof(unsigned int)*(numVerts+1)));
-        CUDA_SAFE_CALL(cudaMallocHost(edge_ptr2,
-                        sizeof(unsigned int)*(numEdges*2)));
-
-        fclose(fp);
-        //Load the specified graph
-        G->LoadMetisGraph(inFileName.c_str());
-    }
-    std::cout<<"Vertices: "<<G->GetNumVertices() << endl;
-    std::cout<<"Edges: "<<G->GetNumEdges() << endl;
-
-
-    int algo = op.getOptionInt("algo");
-    switch(algo)
-    {
-        case 1:
-                RunTest1(resultDB,op,G);
-                break;
-        case 2:
-                RunTest2(resultDB,op,G);
-                break;
-    }
-
-    //Clean up
-    delete G;
-    CUDA_SAFE_CALL(cudaFreeHost(*edge_ptr1));
-    CUDA_SAFE_CALL(cudaFreeHost(*edge_ptr2));
-}

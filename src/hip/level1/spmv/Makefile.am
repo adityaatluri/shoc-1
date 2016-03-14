@@ -7,18 +7,18 @@ include $(top_builddir)/config/config.mk
 include $(top_builddir)/config/targets.mk
 
 # How to find source files
-VPATH = $(srcdir):$(srcdir)/../../common:$(srcdir)/../../../common
+VPATH = $(srcdir):$(srcdir)/../../common:$(srcdir)/../../../common:$(srcdir)/../../level0/epmi
 
-AM_LDFLAGS = $(CUDA_LDFLAGS)
-AM_CPPFLAGS = $(CUDA_INC)
+AM_LDFLAGS = $(HIP_LDFLAGS)
+AM_CPPFLAGS = $(HIP_INC)
 
 # What is the destination for programs built from this directory?
-serialcudadir = $(bindir)/Serial/CUDA
+serialhipdir = $(bindir)/Serial/HIP
 
 # What programs should be installed to that destination?
-serialcuda_PROGRAMS = Spmv
+serialhip_PROGRAMS = Spmv
 
 # How to build those programs?
 Spmv_SOURCES = main.cpp
-Spmv_LDADD = Spmv.o $(CUDA_LIBS) $(LIBS)
+Spmv_LDADD = Spmv.o $(HIP_LIBS) $(LIBS)
 

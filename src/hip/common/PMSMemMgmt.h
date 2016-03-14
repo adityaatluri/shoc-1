@@ -3,8 +3,7 @@
 
 #include <stdlib.h>
 #include "cudacommon.h"
-#include <cuda.h>
-#include <cuda_runtime_api.h>
+#include "hip_runtime_api.h"
 
 // Programming Model-Specific Memory Management
 // Some programming models for heterogeneous systems provide

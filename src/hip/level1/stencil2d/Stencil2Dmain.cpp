@@ -1,4 +1,4 @@
-#include "cuda_runtime_api.h"
+#include "hip_runtime_api.h"
 #if defined(PARALLEL)
 #include "mpi.h"
 #endif // defined(PARALLEL)

@@ -6,10 +6,10 @@
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RATT_THRD, RATT_BLK)
-ratt_kernel(const real* RESTRICT T, real* RESTRICT RF, real TCONV)
+ratt_kernel(hipLaunchParm lp, const real* RESTRICT T, real* RESTRICT RF, real TCONV)
 {
 
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
 
     const register real ALOGT = LOG(TEMP);
     const register real TI = 1.0e0/(TEMP);
@@ -240,10 +240,10 @@ __device__ t1 polyx(t1 x, t2 c0, t3 c1, t4 c2, t5 c3)
 template <class real>
 __global__ void
 LAUNCH_BOUNDS (RDSMH_THRD, RDSMH_BLK)
-rdsmh_kernel(const real* RESTRICT T, real* RESTRICT EG, real TCONV)
+rdsmh_kernel(hipLaunchParm lp, const real* RESTRICT T, real* RESTRICT EG, real TCONV)
 {
 
-    const real TEMP = T[threadIdx.x + (blockIdx.x * blockDim.x)]*TCONV;
+    const real TEMP = T[hipThreadIdx_x + (hipBlockIdx_x * hipBlockDim_x)]*TCONV;
     const real TLOG = LOG((TEMP));
     const real TI = 1.0e0/(TEMP);
 

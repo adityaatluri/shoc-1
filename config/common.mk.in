@@ -35,7 +35,7 @@ CUDA_CPPFLAGS   = @CUDA_CPPFLAGS@ -I$(top_srcdir)/src/cuda/common
 
 HIPCC           = @HIPCC@
 HIP_CXX         = @HIPCC@
-HIP_INC         = -I@HIP_INCDIR@ -I$(top_srcdir)/src/hip/common
+HIP_INC         = -I@HIP_INCDIR@ -I$(top_srcdir)/src/hip/common -I/opt/hsa/include
 HIP_LDFLAGS	    = -L$(top_builddir)/src/hip/common
 HIP_CPPFLAGS    = @HIP_CPPFLAGS@ -I$(top_srcdir)/src/hip/common
 

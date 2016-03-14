@@ -78,7 +78,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-serialcuda_PROGRAMS = Spmv$(EXEEXT)
+serialhip_PROGRAMS = Spmv$(EXEEXT)
 subdir = src/hip/level1/spmv
 DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/build-aux/depcomp
@@ -90,8 +90,8 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-am__installdirs = "$(DESTDIR)$(serialcudadir)"
-PROGRAMS = $(serialcuda_PROGRAMS)
+am__installdirs = "$(DESTDIR)$(serialhipdir)"
+PROGRAMS = $(serialhip_PROGRAMS)
 am_Spmv_OBJECTS = main.$(OBJEXT)
 Spmv_OBJECTS = $(am_Spmv_OBJECTS)
 am__DEPENDENCIES_1 =
@@ -196,7 +196,7 @@ am__relativize = \
   reldir="$$dir2"
 
 # How to find source files
-VPATH = $(srcdir):$(srcdir)/../../common:$(srcdir)/../../../common
+VPATH = $(srcdir):$(srcdir)/../../common:$(srcdir)/../../../common:$(srcdir)/../../level0/epmi
 ACLOCAL = @ACLOCAL@
 ALLOCA = @ALLOCA@
 AMTAR = @AMTAR@
@@ -325,15 +325,15 @@ top_srcdir = @top_srcdir@
 with_hip = @with_hip@
 @BUILD_MPI_TRUE@MAYBE_MPI = epmpi
 SUBDIRS = $(MAYBE_MPI)
-AM_LDFLAGS = $(CUDA_LDFLAGS)
-AM_CPPFLAGS = $(CUDA_INC)
+AM_LDFLAGS = $(HIP_LDFLAGS)
+AM_CPPFLAGS = $(HIP_INC)
 
 # What is the destination for programs built from this directory?
-serialcudadir = $(bindir)/Serial/CUDA
+serialhipdir = $(bindir)/Serial/HIP
 
 # How to build those programs?
 Spmv_SOURCES = main.cpp
-Spmv_LDADD = Spmv.o $(CUDA_LIBS) $(LIBS)
+Spmv_LDADD = Spmv.o $(HIP_LIBS) $(LIBS)
 all: all-recursive
 
 .SUFFIXES:
@@ -368,12 +368,12 @@ $(top_srcdir)/configure:  $(am__configure_deps)
 $(ACLOCAL_M4):  $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
-install-serialcudaPROGRAMS: $(serialcuda_PROGRAMS)
+install-serialhipPROGRAMS: $(serialhip_PROGRAMS)
 	@$(NORMAL_INSTALL)
-	@list='$(serialcuda_PROGRAMS)'; test -n "$(serialcudadir)" || list=; \
+	@list='$(serialhip_PROGRAMS)'; test -n "$(serialhipdir)" || list=; \
 	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(serialcudadir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(serialcudadir)" || exit 1; \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(serialhipdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(serialhipdir)" || exit 1; \
 	fi; \
 	for p in $$list; do echo "$$p $$p"; done | \
 	sed 's/$(EXEEXT)$$//' | \
@@ -392,24 +392,24 @@ install-serialcudaPROGRAMS: $(serialcuda_PROGRAMS)
 	while read type dir files; do \
 	    if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
 	    test -z "$$files" || { \
-	      echo " $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(serialcudadir)$$dir'"; \
-	      $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(serialcudadir)$$dir" || exit $$?; \
+	      echo " $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(serialhipdir)$$dir'"; \
+	      $(INSTALL_PROGRAM_ENV) $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(serialhipdir)$$dir" || exit $$?; \
 	    } \
 	; done
 
-uninstall-serialcudaPROGRAMS:
+uninstall-serialhipPROGRAMS:
 	@$(NORMAL_UNINSTALL)
-	@list='$(serialcuda_PROGRAMS)'; test -n "$(serialcudadir)" || list=; \
+	@list='$(serialhip_PROGRAMS)'; test -n "$(serialhipdir)" || list=; \
 	files=`for p in $$list; do echo "$$p"; done | \
 	  sed -e 'h;s,^.*/,,;s/$(EXEEXT)$$//;$(transform)' \
 	      -e 's/$$/$(EXEEXT)/' \
 	`; \
 	test -n "$$list" || exit 0; \
-	echo " ( cd '$(DESTDIR)$(serialcudadir)' && rm -f" $$files ")"; \
-	cd "$(DESTDIR)$(serialcudadir)" && rm -f $$files
+	echo " ( cd '$(DESTDIR)$(serialhipdir)' && rm -f" $$files ")"; \
+	cd "$(DESTDIR)$(serialhipdir)" && rm -f $$files
 
-clean-serialcudaPROGRAMS:
-	-test -z "$(serialcuda_PROGRAMS)" || rm -f $(serialcuda_PROGRAMS)
+clean-serialhipPROGRAMS:
+	-test -z "$(serialhip_PROGRAMS)" || rm -f $(serialhip_PROGRAMS)
 
 Spmv$(EXEEXT): $(Spmv_OBJECTS) $(Spmv_DEPENDENCIES) $(EXTRA_Spmv_DEPENDENCIES) 
 	@rm -f Spmv$(EXEEXT)
@@ -596,7 +596,7 @@ check: check-recursive
 all-am: Makefile $(PROGRAMS)
 installdirs: installdirs-recursive
 installdirs-am:
-	for dir in "$(DESTDIR)$(serialcudadir)"; do \
+	for dir in "$(DESTDIR)$(serialhipdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-recursive
@@ -631,7 +631,7 @@ maintainer-clean-generic:
 	@echo "it deletes files that may require special tools to rebuild."
 clean: clean-recursive
 
-clean-am: clean-generic clean-serialcudaPROGRAMS mostlyclean-am
+clean-am: clean-generic clean-serialhipPROGRAMS mostlyclean-am
 
 distclean: distclean-recursive
 	-rm -rf ./$(DEPDIR)
@@ -651,7 +651,7 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-serialcudaPROGRAMS
+install-data-am: install-serialhipPROGRAMS
 
 install-dvi: install-dvi-recursive
 
@@ -696,24 +696,24 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-serialcudaPROGRAMS
+uninstall-am: uninstall-serialhipPROGRAMS
 
 .MAKE: $(am__recursive_targets) install-am install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am check \
-	check-am clean clean-generic clean-serialcudaPROGRAMS \
+	check-am clean clean-generic clean-serialhipPROGRAMS \
 	cscopelist-am ctags ctags-am distclean distclean-compile \
 	distclean-generic distclean-tags distdir dvi dvi-am html \
 	html-am info info-am install install-am install-data \
 	install-data-am install-dvi install-dvi-am install-exec \
 	install-exec-am install-html install-html-am install-info \
 	install-info-am install-man install-pdf install-pdf-am \
-	install-ps install-ps-am install-serialcudaPROGRAMS \
+	install-ps install-ps-am install-serialhipPROGRAMS \
 	install-strip installcheck installcheck-am installdirs \
 	installdirs-am maintainer-clean maintainer-clean-generic \
 	mostlyclean mostlyclean-compile mostlyclean-generic pdf pdf-am \
 	ps ps-am tags tags-am uninstall uninstall-am \
-	uninstall-serialcudaPROGRAMS
+	uninstall-serialhipPROGRAMS
 
 
 include $(top_builddir)/config/config.mk
